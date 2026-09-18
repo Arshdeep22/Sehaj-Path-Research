@@ -1,0 +1,440 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Gurmukhi:wght@300;400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --royal-primary: #7c3aed;
+  --royal-glow: rgba(124, 58, 237, 0.4);
+  --gold-primary: #f59e0b;
+  --gold-glow: rgba(245, 158, 11, 0.4);
+  --bg-dark: #0f0a1e;
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+}
+
+* {
+  font-family: 'Noto Sans Gurmukhi', 'Poppins', sans-serif;
+}
+
+html, body {
+  background: #0f0a1e;
+  min-height: 100vh;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.4); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(124,58,237,0.7); }
+
+/* ---- Glass Card ---- */
+@layer components {
+  .glass-card {
+    @apply relative rounded-2xl overflow-hidden;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow:
+      0 20px 60px rgba(0, 0, 0, 0.5),
+      0 6px 20px rgba(124, 58, 237, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card:hover {
+    box-shadow:
+      0 30px 80px rgba(0, 0, 0, 0.6),
+      0 10px 30px rgba(124, 58, 237, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    transform: translateY(-3px);
+    border-color: rgba(124, 58, 237, 0.25);
+  }
+
+  .glass-card-static {
+    @apply relative rounded-2xl overflow-hidden;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow:
+      0 20px 60px rgba(0, 0, 0, 0.5),
+      0 6px 20px rgba(124, 58, 237, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* ---- 3D Buttons ---- */
+  .btn-royal {
+    @apply relative inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold text-white cursor-pointer select-none overflow-hidden;
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    box-shadow:
+      0 8px 24px rgba(124, 58, 237, 0.4),
+      0 2px 8px rgba(0,0,0,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.15);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateY(0) translateZ(0);
+  }
+
+  .btn-royal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+    border-radius: inherit;
+  }
+
+  .btn-royal:hover {
+    transform: translateY(-2px) translateZ(0);
+    box-shadow:
+      0 12px 32px rgba(124, 58, 237, 0.55),
+      0 4px 12px rgba(0,0,0,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+
+  .btn-royal:active {
+    transform: translateY(1px) translateZ(0);
+    box-shadow:
+      0 4px 16px rgba(124, 58, 237, 0.3),
+      0 1px 4px rgba(0,0,0,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.1);
+  }
+
+  .btn-gold {
+    @apply relative inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold text-deep-900 cursor-pointer select-none overflow-hidden;
+    background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+    box-shadow:
+      0 8px 24px rgba(245, 158, 11, 0.4),
+      0 2px 8px rgba(0,0,0,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.25);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateY(0) translateZ(0);
+  }
+
+  .btn-gold::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 60%);
+    border-radius: inherit;
+  }
+
+  .btn-gold:hover {
+    transform: translateY(-2px) translateZ(0);
+    box-shadow:
+      0 12px 32px rgba(245, 158, 11, 0.55),
+      0 4px 12px rgba(0,0,0,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.3);
+  }
+
+  .btn-gold:active {
+    transform: translateY(1px) translateZ(0);
+  }
+
+  .btn-ghost {
+    @apply relative inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold text-royal-300 cursor-pointer select-none;
+    background: rgba(124, 58, 237, 0.1);
+    border: 1px solid rgba(124, 58, 237, 0.25);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-ghost:hover {
+    background: rgba(124, 58, 237, 0.2);
+    border-color: rgba(124, 58, 237, 0.5);
+    transform: translateY(-1px);
+  }
+
+  .btn-danger {
+    @apply relative inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold text-white cursor-pointer select-none;
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    box-shadow: 0 8px 24px rgba(239, 68, 68, 0.3);
+    transition: all 0.2s;
+  }
+
+  .btn-danger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(239, 68, 68, 0.45);
+  }
+
+  /* ---- Input fields ---- */
+  .input-royal {
+    @apply w-full rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s;
+  }
+
+  .input-royal:focus {
+    background: rgba(124, 58, 237, 0.08);
+    border-color: rgba(124, 58, 237, 0.5);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15), 0 0 20px rgba(124, 58, 237, 0.1);
+  }
+
+  .textarea-royal {
+    @apply w-full rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none resize-none;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s;
+    min-height: 100px;
+  }
+
+  .textarea-royal:focus {
+    background: rgba(124, 58, 237, 0.08);
+    border-color: rgba(124, 58, 237, 0.5);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+  }
+
+  /* ---- Progress Bar ---- */
+  .progress-track {
+    @apply w-full rounded-full overflow-hidden;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, #7c3aed 0%, #f59e0b 100%);
+    box-shadow: 0 0 10px rgba(124, 58, 237, 0.6);
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* ---- Score Badge ---- */
+  .score-badge {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-full font-bold;
+    background: linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 100%);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fbbf24;
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+  }
+
+  /* ---- Topic Card ---- */
+  .topic-card {
+    @apply glass-card p-6 cursor-pointer;
+    transform-style: preserve-3d;
+  }
+
+  .topic-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(124,58,237,0.05) 0%, rgba(245,158,11,0.03) 100%);
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .topic-card:hover::after {
+    opacity: 1;
+  }
+
+  /* ---- Shabad Card ---- */
+  .shabad-card {
+    @apply relative rounded-xl p-4 overflow-hidden;
+    background: rgba(124, 58, 237, 0.06);
+    border: 1px solid rgba(124, 58, 237, 0.15);
+    transition: all 0.3s;
+  }
+
+  .shabad-card:hover {
+    background: rgba(124, 58, 237, 0.1);
+    border-color: rgba(124, 58, 237, 0.3);
+    transform: translateX(4px);
+  }
+
+  /* ---- Angle Header ---- */
+  .angle-header {
+    @apply flex items-center gap-3 p-4 rounded-xl cursor-pointer;
+    background: linear-gradient(135deg, rgba(124,58,237,0.12) 0%, rgba(245,158,11,0.06) 100%);
+    border: 1px solid rgba(124,58,237,0.2);
+    transition: all 0.3s;
+  }
+
+  .angle-header:hover {
+    background: linear-gradient(135deg, rgba(124,58,237,0.2) 0%, rgba(245,158,11,0.1) 100%);
+    border-color: rgba(124,58,237,0.4);
+  }
+
+  /* ---- Top Bar ---- */
+  .topbar {
+    @apply fixed top-0 left-0 right-0 z-50 px-4 py-3 flex items-center justify-between;
+    background: rgba(15, 10, 30, 0.85);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  /* ---- Nav Tab ---- */
+  .nav-tab {
+    @apply relative px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .nav-tab:hover {
+    color: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.05);
+  }
+
+  .nav-tab.active {
+    color: #a78bfa;
+    background: rgba(124,58,237,0.15);
+    box-shadow: 0 0 12px rgba(124,58,237,0.2);
+  }
+
+  .nav-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: linear-gradient(90deg, #7c3aed, #f59e0b);
+    border-radius: 2px;
+  }
+
+  /* ---- Leaderboard Row ---- */
+  .lb-row {
+    @apply flex items-center gap-4 p-4 rounded-xl transition-all duration-200;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .lb-row:hover {
+    background: rgba(124, 58, 237, 0.08);
+    border-color: rgba(124, 58, 237, 0.2);
+    transform: translateX(4px);
+  }
+
+  /* ---- Stat Card ---- */
+  .stat-card {
+    @apply relative glass-card p-5 overflow-hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: -30px;
+    right: -30px;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%);
+  }
+
+  /* ---- Label / Badge ---- */
+  .badge-royal {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.3);
+    color: #c4b5fd;
+  }
+
+  .badge-gold {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(245,158,11,0.12);
+    border: 1px solid rgba(245,158,11,0.3);
+    color: #fcd34d;
+  }
+
+  /* ---- Modal Overlay ---- */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    animation: fadeInScale 0.2s ease-out;
+  }
+
+  .modal-box {
+    @apply glass-card-static w-full max-w-lg p-6;
+    animation: fadeInScale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* ---- Divider ---- */
+  .divider-royal {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(124,58,237,0.3), rgba(245,158,11,0.2), transparent);
+  }
+
+  /* ---- Score Float Animation ---- */
+  .score-float {
+    @apply fixed pointer-events-none font-bold text-lg z-50;
+    color: #fbbf24;
+    text-shadow: 0 0 10px rgba(245,158,11,0.8);
+    animation: scoreUp 1.2s ease-out forwards;
+  }
+}
+
+/* ---- Orb Decorations ---- */
+.orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(60px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.orb-1 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 70%);
+  top: -100px;
+  left: -100px;
+  animation: orb 12s ease-in-out infinite;
+}
+
+.orb-2 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(245,158,11,0.12) 0%, transparent 70%);
+  bottom: 0;
+  right: 0;
+  animation: orb 10s ease-in-out infinite reverse;
+}
+
+.orb-3 {
+  width: 250px;
+  height: 250px;
+  background: radial-gradient(circle, rgba(79,46,220,0.12) 0%, transparent 70%);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: orb 15s ease-in-out infinite;
+}
+
+/* ---- Ik Onkar Symbol ---- */
+.ik-onkar {
+  @apply font-extrabold;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 12px rgba(245,158,11,0.5));
+}
+
+/* ---- Gurmukhi Large Text ---- */
+.gurbani-text {
+  font-family: 'Noto Sans Gurmukhi', sans-serif;
+  line-height: 1.9;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Rank Medals ---- */
+.rank-1 { background: linear-gradient(135deg, #ffd700, #ffaa00); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.rank-2 { background: linear-gradient(135deg, #c0c0c0, #a0a0a0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.rank-3 { background: linear-gradient(135deg, #cd7f32, #a0522d); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
