@@ -62,6 +62,8 @@ export default function TopicDetailPage() {
         ;(authors || []).forEach(a => { map[a.id] = a.full_name || a.username })
         setAuthorMap(map)
       }
+    } else {
+      setShabads({})
     }
   }, [topicId])
 
@@ -77,7 +79,6 @@ export default function TopicDetailPage() {
 
       if (!prof || prof.must_change_password) { router.push('/change-password'); return }
       setProfile(prof)
-
       if (!topicData) { router.push('/topics'); return }
       setTopic(topicData)
 
@@ -146,8 +147,7 @@ export default function TopicDetailPage() {
   function getProgress() {
     const totalAngles = angles.length
     const totalShabads = Object.values(shabads).reduce((s, arr) => s + arr.length, 0)
-    const score = (totalAngles * 3) + (totalShabads * 2)
-    return Math.min(100, Math.round((score / 60) * 100))
+    return Math.min(100, Math.round(((totalAngles * 3 + totalShabads * 2) / 60) * 100))
   }
 
   if (loading) return <LoadingScreen />
@@ -170,7 +170,7 @@ export default function TopicDetailPage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Back */}
         <Link href="/topics" className="inline-flex items-center gap-2 mb-6 text-sm transition-opacity"
-          style={{ color: 'rgba(255,255,255,0.4)' }}>
+          style={{ color: 'rgba(12,36,64,0.45)' }}>
           ← ਵਿਸ਼ਿਆਂ ਵੱਲ ਵਾਪਸ
         </Link>
 
@@ -178,9 +178,11 @@ export default function TopicDetailPage() {
         <div className="glass-card-static rounded-2xl p-6 mb-6 animate-fadeInUp">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-white mb-1 gurbani-text">{topic?.title}</h1>
+              <h1 className="text-2xl font-bold mb-1 gurbani-text" style={{ color: '#0c2540' }}>
+                {topic?.title}
+              </h1>
               {topic?.description && (
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>{topic.description}</p>
+                <p className="text-sm" style={{ color: 'rgba(12,36,64,0.5)' }}>{topic.description}</p>
               )}
             </div>
             <div className="flex gap-3 ml-4">
@@ -189,7 +191,7 @@ export default function TopicDetailPage() {
             </div>
           </div>
           <div>
-            <div className="flex justify-between text-xs mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            <div className="flex justify-between text-xs mb-1.5" style={{ color: 'rgba(12,36,64,0.45)' }}>
               <span>ਖੋਜ ਦੀ ਤਰੱਕੀ</span>
               <span className="font-semibold">{progress}%</span>
             </div>
@@ -201,7 +203,7 @@ export default function TopicDetailPage() {
 
         {/* Add Angle Button */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">ਦ੍ਰਿਸ਼ਟੀਕੋਣ</h2>
+          <h2 className="text-lg font-semibold" style={{ color: '#0c2540' }}>ਦ੍ਰਿਸ਼ਟੀਕੋਣ</h2>
           <button onClick={() => setShowAddAngle(true)} className="btn-gold text-sm px-4 py-2">
             + ਨਵਾਂ ਦ੍ਰਿਸ਼ਟੀਕੋਣ (+10 ✦)
           </button>
@@ -211,8 +213,8 @@ export default function TopicDetailPage() {
         {angles.length === 0 && !showAddAngle && (
           <div className="glass-card-static rounded-2xl p-12 text-center mb-6">
             <div className="text-4xl mb-3">🔭</div>
-            <p className="text-white font-medium mb-1">ਅਜੇ ਕੋਈ ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਨਹੀਂ</p>
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            <p className="font-medium mb-1" style={{ color: '#0c2540' }}>ਅਜੇ ਕੋਈ ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਨਹੀਂ</p>
+            <p className="text-sm" style={{ color: 'rgba(12,36,64,0.4)' }}>
               ਪਹਿਲਾ ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਜੋੜੋ ਅਤੇ 10 ਅੰਕ ਜਿੱਤੋ
             </p>
           </div>
@@ -226,7 +228,6 @@ export default function TopicDetailPage() {
               angleIndex={ai}
               shabads={shabads[angle.id] || []}
               authorMap={authorMap}
-              currentUserId={profile.id}
               expanded={expandedAngles[angle.id]}
               onToggle={() => setExpandedAngles(p => ({ ...p, [angle.id]: !p[angle.id] }))}
               onAddShabad={() => { setShowAddShabad(angle.id); setShabadText(''); setShabadComment('') }}
@@ -236,8 +237,8 @@ export default function TopicDetailPage() {
 
         {/* Scoring hint */}
         <div className="mt-8 p-4 rounded-xl text-center"
-          style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.12)' }}>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          style={{ background: 'rgba(14,65,110,0.04)', border: '1px solid rgba(14,65,110,0.08)' }}>
+          <p className="text-sm" style={{ color: 'rgba(12,36,64,0.45)' }}>
             ✦ ਨਵਾਂ ਦ੍ਰਿਸ਼ਟੀਕੋਣ = 10 ਅੰਕ &nbsp;|&nbsp; ਸ਼ਬਦ ਜੋੜੋ = 5 ਅੰਕ
           </p>
         </div>
@@ -247,17 +248,17 @@ export default function TopicDetailPage() {
       {showAddAngle && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddAngle(false)}>
           <div className="modal-box">
-            <h3 className="text-lg font-bold text-white mb-1">ਨਵਾਂ ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਜੋੜੋ</h3>
-            <p className="text-sm mb-5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            <h3 className="text-lg font-bold mb-1" style={{ color: '#0c2540' }}>ਨਵਾਂ ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਜੋੜੋ</h3>
+            <p className="text-sm mb-5" style={{ color: 'rgba(12,36,64,0.45)' }}>
               ਇਸ ਵਿਸ਼ੇ ਨੂੰ ਕਿਸੇ ਨਵੇਂ ਨਜ਼ਰੀਏ ਤੋਂ ਦੇਖੋ (+10 ✦)
             </p>
             <form onSubmit={addAngle} className="space-y-4">
               <div>
-                <label className="block text-sm mb-1.5" style={{ color: 'rgba(255,255,255,0.6)' }}>ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਦਾ ਸਿਰਲੇਖ *</label>
+                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਦਾ ਸਿਰਲੇਖ *</label>
                 <input className="input-royal" placeholder="ਜਿਵੇਂ: ਭਗਤੀ ਦਾ ਪੱਖ" value={angleTitle} onChange={e => setAngleTitle(e.target.value)} required />
               </div>
               <div>
-                <label className="block text-sm mb-1.5" style={{ color: 'rgba(255,255,255,0.6)' }}>ਵਰਣਨ (ਵਿਕਲਪਿਕ)</label>
+                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਵਰਣਨ (ਵਿਕਲਪਿਕ)</label>
                 <textarea className="textarea-royal" placeholder="ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਬਾਰੇ ਸੰਖੇਪ ਜਾਣਕਾਰੀ..." value={angleDesc} onChange={e => setAngleDesc(e.target.value)} rows={3} />
               </div>
               <div className="flex gap-3 pt-2">
@@ -273,13 +274,13 @@ export default function TopicDetailPage() {
       {showAddShabad && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddShabad(null)}>
           <div className="modal-box">
-            <h3 className="text-lg font-bold text-white mb-1">ਸ਼ਬਦ ਜੋੜੋ</h3>
-            <p className="text-sm mb-5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            <h3 className="text-lg font-bold mb-1" style={{ color: '#0c2540' }}>ਸ਼ਬਦ ਜੋੜੋ</h3>
+            <p className="text-sm mb-5" style={{ color: 'rgba(12,36,64,0.45)' }}>
               ਗੁਰਬਾਣੀ ਵਿੱਚੋਂ ਸ਼ਬਦ ਕਾਪੀ-ਪੇਸਟ ਕਰੋ (+5 ✦)
             </p>
             <form onSubmit={addShabad} className="space-y-4">
               <div>
-                <label className="block text-sm mb-1.5" style={{ color: 'rgba(255,255,255,0.6)' }}>ਸ਼ਬਦ (ਗੁਰਬਾਣੀ) *</label>
+                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਸ਼ਬਦ (ਗੁਰਬਾਣੀ) *</label>
                 <textarea
                   className="textarea-royal gurbani-text text-base"
                   placeholder="ਇੱਥੇ ਸ਼ਬਦ ਪੇਸਟ ਕਰੋ..."
@@ -290,7 +291,7 @@ export default function TopicDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm mb-1.5" style={{ color: 'rgba(255,255,255,0.6)' }}>ਤੁਹਾਡੀ ਟਿੱਪਣੀ (ਵਿਕਲਪਿਕ)</label>
+                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਤੁਹਾਡੀ ਟਿੱਪਣੀ (ਵਿਕਲਪਿਕ)</label>
                 <textarea
                   className="textarea-royal"
                   placeholder="ਇਹ ਸ਼ਬਦ ਇਸ ਵਿਸ਼ੇ ਨਾਲ ਕਿਵੇਂ ਸੰਬੰਧਿਤ ਹੈ..."
@@ -311,62 +312,60 @@ export default function TopicDetailPage() {
   )
 }
 
-function AngleSection({ angle, angleIndex, shabads, authorMap, currentUserId, expanded, onToggle, onAddShabad }) {
+function AngleSection({ angle, angleIndex, shabads, authorMap, expanded, onToggle, onAddShabad }) {
   return (
     <div className="animate-fadeInUp" style={{ animationDelay: `${angleIndex * 0.06}s` }}>
-      {/* Angle Header */}
       <div className="angle-header mb-2" onClick={onToggle}>
         <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 font-bold text-sm"
-          style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)', color: '#e9d5ff' }}>
+          style={{ background: 'linear-gradient(135deg, #1a5f8f, #0c2540)', color: 'white' }}>
           {angleIndex + 1}
         </div>
         <div className="flex-1">
-          <h3 className="font-semibold text-white gurbani-text">{angle.title}</h3>
+          <h3 className="font-semibold gurbani-text" style={{ color: '#0c2540' }}>{angle.title}</h3>
           {angle.description && (
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>{angle.description}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(12,36,64,0.5)' }}>{angle.description}</p>
           )}
         </div>
         <div className="flex items-center gap-3">
           <span className="badge-royal text-xs">{shabads.length} ਸ਼ਬਦ</span>
-          <span className="text-white opacity-40 text-lg">{expanded ? '▲' : '▼'}</span>
+          <span className="text-lg" style={{ color: 'rgba(12,36,64,0.35)' }}>{expanded ? '▲' : '▼'}</span>
         </div>
       </div>
 
-      {/* Shabads */}
       {expanded && (
         <div className="ml-4 pl-4 border-l space-y-3 pb-4"
-          style={{ borderColor: 'rgba(124,58,237,0.2)' }}>
+          style={{ borderColor: 'rgba(14,65,110,0.15)' }}>
           {shabads.length === 0 && (
-            <div className="py-4 text-center text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <div className="py-4 text-center text-sm" style={{ color: 'rgba(12,36,64,0.35)' }}>
               ਅਜੇ ਕੋਈ ਸ਼ਬਦ ਨਹੀਂ — ਪਹਿਲਾ ਸ਼ਬਦ ਜੋੜੋ
             </div>
           )}
 
           {shabads.map(shabad => (
             <div key={shabad.id} className="shabad-card">
-              <p className="text-white gurbani-text text-base leading-relaxed mb-2 whitespace-pre-wrap">
+              <p className="gurbani-text text-base leading-relaxed mb-2 whitespace-pre-wrap" style={{ color: '#0c2540' }}>
                 {shabad.shabad_text}
               </p>
               {shabad.comment && (
                 <>
                   <div className="divider-royal my-2" />
-                  <p className="text-sm italic" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                  <p className="text-sm italic" style={{ color: 'rgba(12,36,64,0.6)' }}>
                     "{shabad.comment}"
                   </p>
                 </>
               )}
               <div className="flex items-center justify-between mt-3 pt-2"
-                style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                style={{ borderTop: '1px solid rgba(14,65,110,0.08)' }}>
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                    style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)', color: '#e9d5ff' }}>
+                    style={{ background: 'linear-gradient(135deg, #1a5f8f, #0c2540)', color: 'white' }}>
                     {(authorMap[shabad.created_by] || '?')[0].toUpperCase()}
                   </div>
-                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  <span className="text-xs" style={{ color: 'rgba(12,36,64,0.5)' }}>
                     {authorMap[shabad.created_by] || 'ਅਣਜਾਣ'}
                   </span>
                 </div>
-                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                <span className="text-xs" style={{ color: 'rgba(12,36,64,0.3)' }}>
                   {new Date(shabad.created_at).toLocaleDateString('pa-IN')}
                 </span>
               </div>
@@ -376,12 +375,12 @@ function AngleSection({ angle, angleIndex, shabads, authorMap, currentUserId, ex
           <button onClick={onAddShabad}
             className="w-full py-3 rounded-xl text-sm font-medium transition-all duration-200"
             style={{
-              background: 'rgba(124,58,237,0.08)',
-              border: '1px dashed rgba(124,58,237,0.25)',
-              color: 'rgba(167,139,250,0.8)',
+              background: 'rgba(14,65,110,0.05)',
+              border: '1px dashed rgba(14,65,110,0.2)',
+              color: 'rgba(26,95,143,0.85)',
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.15)'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.45)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.08)'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.25)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(14,65,110,0.09)'; e.currentTarget.style.borderColor = 'rgba(14,65,110,0.35)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(14,65,110,0.05)'; e.currentTarget.style.borderColor = 'rgba(14,65,110,0.2)' }}
           >
             + ਸ਼ਬਦ ਜੋੜੋ (+5 ✦)
           </button>
@@ -395,11 +394,11 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
-        <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center animate-pulse3d"
-          style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(245,158,11,0.1))', border: '1px solid rgba(245,158,11,0.3)' }}>
+        <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+          style={{ background: 'linear-gradient(135deg, rgba(14,65,110,0.1), rgba(56,189,248,0.07))', border: '1px solid rgba(245,158,11,0.3)' }}>
           <span className="text-3xl ik-onkar">ੴ</span>
         </div>
-        <p style={{ color: 'rgba(255,255,255,0.4)' }}>ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ...</p>
+        <p style={{ color: 'rgba(12,36,64,0.45)' }}>ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ...</p>
       </div>
     </div>
   )

@@ -46,14 +46,14 @@ export default function ChangePasswordPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4"
             style={{
-              background: 'linear-gradient(135deg, rgba(124,58,237,0.2) 0%, rgba(245,158,11,0.1) 100%)',
+              background: 'linear-gradient(135deg, rgba(14,65,110,0.1), rgba(56,189,248,0.07))',
               border: '1px solid rgba(245,158,11,0.3)',
-              boxShadow: '0 0 30px rgba(124,58,237,0.3)',
+              boxShadow: '0 8px 24px rgba(14,65,110,0.1)',
             }}>
             <span className="text-3xl">🔐</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-1">ਪਾਸਵਰਡ ਬਦਲੋ</h1>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <h1 className="text-2xl font-bold mb-1" style={{ color: '#0c2540' }}>ਪਾਸਵਰਡ ਬਦਲੋ</h1>
+          <p className="text-sm" style={{ color: 'rgba(12,36,64,0.45)' }}>
             ਪਹਿਲੀ ਵਾਰ ਲੌਗਇਨ — ਨਵਾਂ ਪਾਸਵਰਡ ਸੈੱਟ ਕਰੋ
           </p>
         </div>
@@ -61,7 +61,7 @@ export default function ChangePasswordPage() {
         <div className="glass-card-static rounded-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              <label className="block text-sm font-medium mb-2" style={{ color: 'rgba(12,36,64,0.6)' }}>
                 ਨਵਾਂ ਪਾਸਵਰਡ
               </label>
               <input
@@ -74,7 +74,7 @@ export default function ChangePasswordPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              <label className="block text-sm font-medium mb-2" style={{ color: 'rgba(12,36,64,0.6)' }}>
                 ਪਾਸਵਰਡ ਦੁਬਾਰਾ ਲਿਖੋ
               </label>
               <input
@@ -89,7 +89,7 @@ export default function ChangePasswordPage() {
 
             {error && (
               <div className="rounded-xl px-4 py-3 text-sm text-center"
-                style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}>
+                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#dc2626' }}>
                 {error}
               </div>
             )}

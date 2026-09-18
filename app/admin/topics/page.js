@@ -19,10 +19,7 @@ export default function AdminTopicsPage() {
   const [saving, setSaving] = useState(false)
 
   async function loadTopics() {
-    const { data } = await supabase
-      .from('topics')
-      .select('*')
-      .order('created_at', { ascending: true })
+    const { data } = await supabase.from('topics').select('*').order('created_at', { ascending: true })
     setTopics(data || [])
   }
 
@@ -68,19 +65,14 @@ export default function AdminTopicsPage() {
     setExportingId(topic.id)
 
     const { data: angles } = await supabase.from('angles').select('*').eq('topic_id', topic.id).order('created_at')
-    const angleMap = {}
-    const allShabads = []
 
+    const allShabads = []
     if (angles?.length) {
       const authorIds = new Set(angles.map(a => a.created_by))
 
       await Promise.all(angles.map(async angle => {
-        angleMap[angle.id] = angle.title
         const { data: shabads } = await supabase.from('shabads').select('*').eq('angle_id', angle.id).order('created_at')
-        ;(shabads || []).forEach(s => {
-          authorIds.add(s.created_by)
-          allShabads.push({ ...s, angleTitle: angle.title })
-        })
+        ;(shabads || []).forEach(s => { authorIds.add(s.created_by); allShabads.push({ ...s, angleTitle: angle.title }) })
       }))
 
       const { data: authors } = await supabase.from('profiles').select('id, full_name, username').in('id', [...authorIds])
@@ -89,19 +81,10 @@ export default function AdminTopicsPage() {
 
       const rows = [
         ['ਵਿਸ਼ਾ', 'ਦ੍ਰਿਸ਼ਟੀਕੋਣ', 'ਸ਼ਬਦ', 'ਟਿੱਪਣੀ', 'ਵਰਤੋਂਕਾਰ', 'ਮਿਤੀ'],
-        ...allShabads.map(s => [
-          topic.title,
-          s.angleTitle,
-          s.shabad_text,
-          s.comment || '',
-          authorMap[s.created_by] || '',
-          new Date(s.created_at).toLocaleDateString('pa-IN'),
-        ]),
+        ...(allShabads.length
+          ? allShabads.map(s => [topic.title, s.angleTitle, s.shabad_text, s.comment || '', authorMap[s.created_by] || '', new Date(s.created_at).toLocaleDateString('pa-IN')])
+          : [[topic.title, '', 'ਕੋਈ ਸ਼ਬਦ ਨਹੀਂ', '', '', '']]),
       ]
-
-      if (allShabads.length === 0) {
-        rows.push([topic.title, '', 'ਕੋਈ ਸ਼ਬਦ ਨਹੀਂ', '', '', ''])
-      }
 
       const csv = '﻿' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -130,23 +113,21 @@ export default function AdminTopicsPage() {
       <TopBar profile={profile} />
 
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8 animate-fadeInUp">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-1">ਵਿਸ਼ੇ ਪ੍ਰਬੰਧਨ</h1>
-            <p style={{ color: 'rgba(255,255,255,0.4)' }}>ਨਵੇਂ ਵਿਸ਼ੇ ਜੋੜੋ ਜਾਂ ਸੰਪਾਦਿਤ ਕਰੋ</p>
+            <h1 className="text-3xl font-bold mb-1" style={{ color: '#0c2540' }}>ਵਿਸ਼ੇ ਪ੍ਰਬੰਧਨ</h1>
+            <p style={{ color: 'rgba(12,36,64,0.45)' }}>ਨਵੇਂ ਵਿਸ਼ੇ ਜੋੜੋ ਜਾਂ ਸੰਪਾਦਿਤ ਕਰੋ</p>
           </div>
           <button onClick={() => { setShowAdd(true); setEditTopic(null); setTitle(''); setDescription('') }} className="btn-gold text-sm px-4 py-2">
             + ਨਵਾਂ ਵਿਸ਼ਾ
           </button>
         </div>
 
-        {/* Topics List */}
         {topics.length === 0 ? (
           <div className="glass-card-static rounded-2xl p-16 text-center">
             <div className="text-6xl mb-4">📚</div>
-            <p className="text-white text-lg">ਅਜੇ ਕੋਈ ਵਿਸ਼ਾ ਨਹੀਂ</p>
-            <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.4)' }}>ਉੱਪਰ ਦਿੱਤੇ ਬਟਨ ਨਾਲ ਪਹਿਲਾ ਵਿਸ਼ਾ ਜੋੜੋ</p>
+            <p className="text-lg font-medium" style={{ color: '#0c2540' }}>ਅਜੇ ਕੋਈ ਵਿਸ਼ਾ ਨਹੀਂ</p>
+            <p className="text-sm mt-2" style={{ color: 'rgba(12,36,64,0.4)' }}>ਉੱਪਰ ਦਿੱਤੇ ਬਟਨ ਨਾਲ ਪਹਿਲਾ ਵਿਸ਼ਾ ਜੋੜੋ</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -155,35 +136,28 @@ export default function AdminTopicsPage() {
                 <div className="p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-bold text-white mb-1 gurbani-text">{topic.title}</h3>
+                      <h3 className="text-xl font-bold mb-1 gurbani-text" style={{ color: '#0c2540' }}>{topic.title}</h3>
                       {topic.description && (
-                        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>{topic.description}</p>
+                        <p className="text-sm" style={{ color: 'rgba(12,36,64,0.5)' }}>{topic.description}</p>
                       )}
-                      <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                      <p className="text-xs mt-2" style={{ color: 'rgba(12,36,64,0.3)' }}>
                         {new Date(topic.created_at).toLocaleDateString('pa-IN')}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => handleExport(topic)}
-                        disabled={exportingId === topic.id}
+                      <button onClick={() => handleExport(topic)} disabled={exportingId === topic.id}
                         className="px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                        style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.25)', color: '#6ee7b7' }}
-                      >
-                        {exportingId === topic.id ? '...' : '↓ Excel'}
+                        style={{ background: 'rgba(14,65,110,0.07)', border: '1px solid rgba(14,65,110,0.15)', color: '#0c2540' }}>
+                        {exportingId === topic.id ? '...' : '↓ CSV'}
                       </button>
-                      <button
-                        onClick={() => openEdit(topic)}
+                      <button onClick={() => openEdit(topic)}
                         className="px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                        style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.25)', color: '#c4b5fd' }}
-                      >
+                        style={{ background: 'rgba(14,65,110,0.07)', border: '1px solid rgba(14,65,110,0.15)', color: '#1a5f8f' }}>
                         ਸੰਪਾਦਨ
                       </button>
-                      <button
-                        onClick={() => handleDelete(topic.id, topic.title)}
+                      <button onClick={() => handleDelete(topic.id, topic.title)}
                         className="px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                        style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}
-                      >
+                        style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)', color: '#dc2626' }}>
                         ਹਟਾਓ
                       </button>
                     </div>
@@ -199,16 +173,16 @@ export default function AdminTopicsPage() {
       {showAdd && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && (setShowAdd(false), setEditTopic(null))}>
           <div className="modal-box">
-            <h3 className="text-xl font-bold text-white mb-5">
+            <h3 className="text-xl font-bold mb-5" style={{ color: '#0c2540' }}>
               {editTopic ? 'ਵਿਸ਼ਾ ਸੰਪਾਦਨ ਕਰੋ' : 'ਨਵਾਂ ਵਿਸ਼ਾ ਜੋੜੋ'}
             </h3>
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-sm mb-1.5" style={{ color: 'rgba(255,255,255,0.6)' }}>ਵਿਸ਼ੇ ਦਾ ਸਿਰਲੇਖ *</label>
+                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਵਿਸ਼ੇ ਦਾ ਸਿਰਲੇਖ *</label>
                 <input className="input-royal" placeholder="ਗੁਰਮੁਖੀ ਵਿੱਚ ਲਿਖੋ" value={title} onChange={e => setTitle(e.target.value)} required />
               </div>
               <div>
-                <label className="block text-sm mb-1.5" style={{ color: 'rgba(255,255,255,0.6)' }}>ਵਰਣਨ (ਵਿਕਲਪਿਕ)</label>
+                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਵਰਣਨ (ਵਿਕਲਪਿਕ)</label>
                 <textarea className="textarea-royal" placeholder="ਵਿਸ਼ੇ ਬਾਰੇ ਜਾਣਕਾਰੀ..." value={description} onChange={e => setDescription(e.target.value)} rows={3} />
               </div>
               <div className="flex gap-3 pt-2">
@@ -229,11 +203,11 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
-        <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center animate-pulse3d"
-          style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(245,158,11,0.1))', border: '1px solid rgba(245,158,11,0.3)' }}>
+        <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+          style={{ background: 'linear-gradient(135deg, rgba(14,65,110,0.1), rgba(56,189,248,0.07))', border: '1px solid rgba(245,158,11,0.3)' }}>
           <span className="text-3xl ik-onkar">ੴ</span>
         </div>
-        <p style={{ color: 'rgba(255,255,255,0.4)' }}>ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ...</p>
+        <p style={{ color: 'rgba(12,36,64,0.45)' }}>ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ...</p>
       </div>
     </div>
   )

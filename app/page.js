@@ -50,16 +50,16 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4"
             style={{
-              background: 'linear-gradient(135deg, rgba(124,58,237,0.2) 0%, rgba(245,158,11,0.1) 100%)',
-              border: '1px solid rgba(245,158,11,0.3)',
-              boxShadow: '0 0 40px rgba(124,58,237,0.3), 0 0 60px rgba(245,158,11,0.1)',
+              background: 'linear-gradient(135deg, rgba(14,65,110,0.1) 0%, rgba(56,189,248,0.08) 100%)',
+              border: '1px solid rgba(245,158,11,0.35)',
+              boxShadow: '0 8px 32px rgba(14,65,110,0.12), 0 0 40px rgba(245,158,11,0.08)',
             }}>
             <span className="text-4xl ik-onkar">ੴ</span>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-1" style={{ fontFamily: 'Noto Sans Gurmukhi' }}>
+          <h1 className="text-3xl font-bold mb-1" style={{ color: '#0c2540', fontFamily: 'Noto Sans Gurmukhi' }}>
             ਸਹਿਜ ਪਾਠ ਖੋਜ
           </h1>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-sm" style={{ color: 'rgba(12,36,64,0.45)' }}>
             ਗੁਰੂ ਗ੍ਰੰਥ ਸਾਹਿਬ ਦੀ ਸਾਂਝੀ ਵਿਚਾਰ
           </p>
         </div>
@@ -68,7 +68,7 @@ export default function LoginPage() {
         <div className="glass-card-static rounded-2xl p-8">
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              <label className="block text-sm font-medium mb-2" style={{ color: 'rgba(12,36,64,0.6)' }}>
                 ਵਰਤੋਂਕਾਰ ਨਾਮ
               </label>
               <input
@@ -83,7 +83,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              <label className="block text-sm font-medium mb-2" style={{ color: 'rgba(12,36,64,0.6)' }}>
                 ਪਾਸਵਰਡ
               </label>
               <input
@@ -99,7 +99,7 @@ export default function LoginPage() {
 
             {error && (
               <div className="rounded-xl px-4 py-3 text-sm text-center"
-                style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}>
+                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#dc2626' }}>
                 {error}
               </div>
             )}
@@ -119,8 +119,7 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Decorative bottom text */}
-        <p className="text-center text-xs mt-6" style={{ color: 'rgba(255,255,255,0.2)' }}>
+        <p className="text-center text-xs mt-6" style={{ color: 'rgba(12,36,64,0.3)' }}>
           ਪਾਸਵਰਡ ਭੁੱਲ ਗਏ? ਪ੍ਰਬੰਧਕ ਨਾਲ ਸੰਪਰਕ ਕਰੋ
         </p>
       </div>
