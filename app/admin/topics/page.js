@@ -109,7 +109,7 @@ export default function AdminTopicsPage() {
   if (loading) return <LoadingScreen />
 
   return (
-    <div className="min-h-screen" style={{ paddingTop: '72px' }}>
+    <div className="page-body">
       <TopBar profile={profile} />
 
       <div className="max-w-4xl mx-auto px-4 py-8">

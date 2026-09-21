@@ -156,7 +156,7 @@ export default function TopicDetailPage() {
   const totalShabads = Object.values(shabads).reduce((s, arr) => s + arr.length, 0)
 
   return (
-    <div className="min-h-screen" style={{ paddingTop: '72px' }}>
+    <div className="page-body">
       <TopBar profile={profile} />
 
       {/* Score Float */}
