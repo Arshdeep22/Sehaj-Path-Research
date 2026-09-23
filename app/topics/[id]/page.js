@@ -108,9 +108,6 @@ export default function TopicDetailPage() {
     }).select().single()
 
     if (!error) {
-      await supabase.from('profiles').update({ score: (profile.score || 0) + 10 }).eq('id', profile.id)
-      setProfile(p => ({ ...p, score: (p.score || 0) + 10 }))
-      showScoreAnimation('+10', e)
       setAngleTitle('')
       setAngleDesc('')
       setShowAddAngle(false)
@@ -205,7 +202,7 @@ export default function TopicDetailPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold" style={{ color: '#0c2540' }}>ਦ੍ਰਿਸ਼ਟੀਕੋਣ</h2>
           <button onClick={() => setShowAddAngle(true)} className="btn-gold text-sm px-4 py-2">
-            + ਨਵਾਂ ਦ੍ਰਿਸ਼ਟੀਕੋਣ (+10 ✦)
+            + ਨਵਾਂ ਦ੍ਰਿਸ਼ਟੀਕੋਣ
           </button>
         </div>
 
@@ -250,7 +247,7 @@ export default function TopicDetailPage() {
           <div className="modal-box">
             <h3 className="text-lg font-bold mb-1" style={{ color: '#0c2540' }}>ਨਵਾਂ ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਜੋੜੋ</h3>
             <p className="text-sm mb-5" style={{ color: 'rgba(12,36,64,0.45)' }}>
-              ਇਸ ਵਿਸ਼ੇ ਨੂੰ ਕਿਸੇ ਨਵੇਂ ਨਜ਼ਰੀਏ ਤੋਂ ਦੇਖੋ (+10 ✦)
+              ਇਸ ਵਿਸ਼ੇ ਨੂੰ ਕਿਸੇ ਨਵੇਂ ਨਜ਼ਰੀਏ ਤੋਂ ਦੇਖੋ
             </p>
             <form onSubmit={addAngle} className="space-y-4">
               <div>
@@ -263,7 +260,7 @@ export default function TopicDetailPage() {
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowAddAngle(false)} className="btn-ghost flex-1 py-3">ਰੱਦ ਕਰੋ</button>
-                <button type="submit" disabled={saving} className="btn-gold flex-1 py-3">{saving ? 'ਜੋੜ ਰਿਹਾ ਹੈ...' : 'ਜੋੜੋ (+10 ✦)'}</button>
+                <button type="submit" disabled={saving} className="btn-gold flex-1 py-3">{saving ? 'ਜੋੜ ਰਿਹਾ ਹੈ...' : 'ਜੋੜੋ'}</button>
               </div>
             </form>
           </div>
