@@ -13,6 +13,7 @@ export default function TopicsPage() {
   const [topicStats, setTopicStats] = useState({})
   const [loading, setLoading] = useState(true)
 
+  const [search, setSearch] = useState('')
   const [showAddTopic, setShowAddTopic] = useState(false)
   const [newTopicTitle, setNewTopicTitle] = useState('')
   const [newTopicDesc, setNewTopicDesc] = useState('')
@@ -106,6 +107,14 @@ export default function TopicsPage() {
 
   if (loading) return <LoadingScreen />
 
+  const query = search.trim().toLowerCase()
+  const filteredTopics = query
+    ? topics.filter(t =>
+        t.title.toLowerCase().includes(query) ||
+        (t.description && t.description.toLowerCase().includes(query))
+      )
+    : topics
+
   return (
     <div className="page-body">
       <TopBar profile={profile} />
@@ -125,15 +134,46 @@ export default function TopicsPage() {
           </button>
         </div>
 
+        {/* Search bar */}
+        <div className="relative mb-5 animate-fadeInUp" style={{ animationDelay: '0.05s' }}>
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="rgba(12,36,64,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="search"
+            className="input-royal pl-9 pr-9"
+            placeholder="ਵਿਸ਼ਾ ਲੱਭੋ..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2"
+              style={{ color: 'rgba(12,36,64,0.35)', lineHeight: 1 }}
+              aria-label="clear">
+              ✕
+            </button>
+          )}
+        </div>
+
         {topics.length === 0 ? (
           <div className="glass-card-static rounded-2xl p-12 text-center">
             <div className="text-5xl mb-3">📚</div>
             <p className="text-base mb-1 font-medium" style={{ color: '#0c2540' }}>ਅਜੇ ਕੋਈ ਵਿਸ਼ਾ ਨਹੀਂ ਜੋੜਿਆ</p>
             <p className="text-sm" style={{ color: 'rgba(12,36,64,0.4)' }}>ਉੱਪਰ + ਬਟਨ ਦੱਬ ਕੇ ਪਹਿਲਾ ਵਿਸ਼ਾ ਜੋੜੋ</p>
           </div>
+        ) : filteredTopics.length === 0 ? (
+          <div className="glass-card-static rounded-2xl p-12 text-center">
+            <div className="text-4xl mb-3">🔍</div>
+            <p className="text-base font-medium" style={{ color: '#0c2540' }}>ਕੋਈ ਨਤੀਜਾ ਨਹੀਂ ਮਿਲਿਆ</p>
+            <p className="text-sm mt-1" style={{ color: 'rgba(12,36,64,0.4)' }}>ਕੋਈ ਹੋਰ ਸ਼ਬਦ ਵਰਤੋ</p>
+          </div>
         ) : (
           <div className="space-y-4">
-            {topics.map((topic, i) => {
+            {filteredTopics.map((topic, i) => {
               const stats = topicStats[topic.id] || { angles: 0, shabads: 0 }
               const progress = getProgress(topic.id)
               return (
