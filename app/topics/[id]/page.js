@@ -23,7 +23,6 @@ export default function TopicDetailPage() {
   const [scoreFloat, setScoreFloat] = useState(null)
 
   const [angleTitle, setAngleTitle] = useState('')
-  const [angleDesc, setAngleDesc] = useState('')
   const [shabadText, setShabadText] = useState('')
   const [shabadComment, setShabadComment] = useState('')
   const [saving, setSaving] = useState(false)
@@ -35,6 +34,10 @@ export default function TopicDetailPage() {
   const [savingEditTopic, setSavingEditTopic] = useState(false)
   const [showDeleteTopicConfirm, setShowDeleteTopicConfirm] = useState(false)
   const [deletingTopic, setDeletingTopic] = useState(false)
+
+  // Angle delete
+  const [showDeleteAngleConfirm, setShowDeleteAngleConfirm] = useState(null)
+  const [deletingAngle, setDeletingAngle] = useState(false)
 
   // Shabad edit / delete
   const [showEditShabad, setShowEditShabad] = useState(null)
@@ -122,13 +125,11 @@ export default function TopicDetailPage() {
     const { data: newAngle, error } = await supabase.from('angles').insert({
       topic_id: topicId,
       title: angleTitle.trim(),
-      description: angleDesc.trim() || null,
       created_by: profile.id,
     }).select().single()
 
     if (!error) {
       setAngleTitle('')
-      setAngleDesc('')
       setShowAddAngle(false)
       await loadData()
       setExpandedAngles(prev => ({ ...prev, [newAngle.id]: true }))
@@ -139,6 +140,7 @@ export default function TopicDetailPage() {
   async function addShabad(e) {
     e.preventDefault()
     if (!shabadText.trim()) return
+    if (shabadComment.trim().length < 50) return
     setSaving(true)
     const { error } = await supabase.from('shabads').insert({
       angle_id: showAddShabad,
@@ -185,6 +187,28 @@ export default function TopicDetailPage() {
     })
     if (res.ok) router.push('/topics')
     else setDeletingTopic(false)
+  }
+
+  async function handleDeleteAngle(angle) {
+    setDeletingAngle(true)
+    const angleShabads = shabads[angle.id] || []
+    const myShabads = angleShabads.filter(s => s.created_by === profile.id)
+
+    if (angleShabads.length > 0) {
+      await supabase.from('shabads').delete().eq('angle_id', angle.id)
+    }
+
+    const { error } = await supabase.from('angles').delete().eq('id', angle.id).eq('created_by', profile.id)
+    if (!error) {
+      if (myShabads.length > 0) {
+        const newScore = Math.max(0, (profile.score || 0) - myShabads.length * 5)
+        await supabase.from('profiles').update({ score: newScore }).eq('id', profile.id)
+        setProfile(p => ({ ...p, score: newScore }))
+      }
+      await loadData()
+      setShowDeleteAngleConfirm(null)
+    }
+    setDeletingAngle(false)
   }
 
   async function handleEditShabad(e) {
@@ -336,6 +360,7 @@ export default function TopicDetailPage() {
               profileId={profile?.id}
               onToggle={() => setExpandedAngles(p => ({ ...p, [angle.id]: !p[angle.id] }))}
               onAddShabad={() => { setShowAddShabad(angle.id); setShabadText(''); setShabadComment('') }}
+              onDeleteAngle={() => setShowDeleteAngleConfirm(angle)}
               onEditShabad={shabad => { setShowEditShabad(shabad); setEditShabadText(shabad.shabad_text); setEditShabadComment(shabad.comment || '') }}
               onDeleteShabad={shabadId => setShowDeleteShabadConfirm(shabadId)}
             />
@@ -353,10 +378,6 @@ export default function TopicDetailPage() {
               <div>
                 <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਦਾ ਸਿਰਲੇਖ *</label>
                 <input className="input-royal" placeholder="ਜਿਵੇਂ: ਭਗਤੀ ਦਾ ਪੱਖ" value={angleTitle} onChange={e => setAngleTitle(e.target.value)} required autoFocus />
-              </div>
-              <div>
-                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਵਰਣਨ (ਵਿਕਲਪਿਕ)</label>
-                <textarea className="textarea-royal" placeholder="ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਬਾਰੇ ਸੰਖੇਪ ਜਾਣਕਾਰੀ..." value={angleDesc} onChange={e => setAngleDesc(e.target.value)} rows={3} />
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowAddAngle(false)} className="btn-ghost flex-1 py-3">ਰੱਦ ਕਰੋ</button>
@@ -379,12 +400,15 @@ export default function TopicDetailPage() {
                 <textarea className="textarea-royal gurbani-text text-base" placeholder="ਇੱਥੇ ਸ਼ਬਦ ਪੇਸਟ ਕਰੋ..." value={shabadText} onChange={e => setShabadText(e.target.value)} rows={5} required />
               </div>
               <div>
-                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਤੁਹਾਡੀ ਟਿੱਪਣੀ (ਵਿਕਲਪਿਕ)</label>
-                <textarea className="textarea-royal" placeholder="ਇਹ ਸ਼ਬਦ ਇਸ ਵਿਸ਼ੇ ਨਾਲ ਕਿਵੇਂ ਸੰਬੰਧਿਤ ਹੈ..." value={shabadComment} onChange={e => setShabadComment(e.target.value)} rows={3} />
+                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਤੁਹਾਡੀ ਟਿੱਪਣੀ *</label>
+                <textarea className="textarea-royal" placeholder="ਇਹ ਸ਼ਬਦ ਇਸ ਵਿਸ਼ੇ ਨਾਲ ਕਿਵੇਂ ਸੰਬੰਧਿਤ ਹੈ..." value={shabadComment} onChange={e => setShabadComment(e.target.value)} rows={3} required />
+                <p className="text-xs mt-1 text-right" style={{ color: shabadComment.trim().length >= 50 ? 'rgba(22,163,74,0.8)' : 'rgba(239,68,68,0.7)' }}>
+                  {shabadComment.trim().length}/50 ਅੱਖਰ
+                </p>
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowAddShabad(null)} className="btn-ghost flex-1 py-3">ਰੱਦ ਕਰੋ</button>
-                <button type="submit" disabled={saving} className="btn-royal flex-1 py-3">{saving ? 'ਜੋੜ ਰਿਹਾ ਹੈ...' : 'ਜੋੜੋ'}</button>
+                <button type="submit" disabled={saving || shabadComment.trim().length < 50} className="btn-royal flex-1 py-3">{saving ? 'ਜੋੜ ਰਿਹਾ ਹੈ...' : 'ਜੋੜੋ'}</button>
               </div>
             </form>
           </div>
@@ -426,6 +450,24 @@ export default function TopicDetailPage() {
               <button onClick={() => setShowDeleteTopicConfirm(false)} disabled={deletingTopic} className="btn-ghost flex-1 py-3">ਰੱਦ ਕਰੋ</button>
               <button onClick={handleDeleteTopic} disabled={deletingTopic} className="btn-danger flex-1 py-3">
                 {deletingTopic ? 'ਮਿਟਾਇਆ ਜਾ ਰਿਹਾ ਹੈ...' : 'ਮਿਟਾਓ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Angle Confirm ── */}
+      {showDeleteAngleConfirm && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !deletingAngle && setShowDeleteAngleConfirm(null)}>
+          <div className="modal-box">
+            <h3 className="text-lg font-bold mb-2" style={{ color: '#0c2540' }}>ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਮਿਟਾਓ?</h3>
+            <p className="text-sm mb-6" style={{ color: 'rgba(12,36,64,0.5)' }}>
+              ਇਹ ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਅਤੇ ਇਸ ਦੇ ਸਾਰੇ ਸ਼ਬਦ ਹਮੇਸ਼ਾ ਲਈ ਮਿਟ ਜਾਣਗੇ।
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeleteAngleConfirm(null)} disabled={deletingAngle} className="btn-ghost flex-1 py-3">ਰੱਦ ਕਰੋ</button>
+              <button onClick={() => handleDeleteAngle(showDeleteAngleConfirm)} disabled={deletingAngle} className="btn-danger flex-1 py-3">
+                {deletingAngle ? 'ਮਿਟਾਇਆ ਜਾ ਰਿਹਾ ਹੈ...' : 'ਮਿਟਾਓ'}
               </button>
             </div>
           </div>
@@ -476,7 +518,8 @@ export default function TopicDetailPage() {
   )
 }
 
-function AngleSection({ angle, angleIndex, shabads, authorMap, expanded, profileId, onToggle, onAddShabad, onEditShabad, onDeleteShabad }) {
+function AngleSection({ angle, angleIndex, shabads, authorMap, expanded, profileId, onToggle, onAddShabad, onDeleteAngle, onEditShabad, onDeleteShabad }) {
+  const isAngleOwner = angle.created_by === profileId
   return (
     <div className="animate-fadeInUp" style={{ animationDelay: `${angleIndex * 0.06}s` }}>
       <div className="angle-header mb-2" onClick={onToggle}>
@@ -490,8 +533,25 @@ function AngleSection({ angle, angleIndex, shabads, authorMap, expanded, profile
             <p className="text-xs mt-0.5" style={{ color: 'rgba(12,36,64,0.5)' }}>{angle.description}</p>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="badge-royal text-xs">{shabads.length} ਸ਼ਬਦ</span>
+          {isAngleOwner && (
+            <button
+              onClick={e => { e.stopPropagation(); onDeleteAngle() }}
+              className="p-1.5 rounded-lg transition-colors"
+              style={{ color: 'rgba(239,68,68,0.45)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.color = '#ef4444' }}
+              onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'rgba(239,68,68,0.45)' }}
+              title="ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਮਿਟਾਓ"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6" /><path d="M14 11v6" />
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              </svg>
+            </button>
+          )}
           <span className="text-lg" style={{ color: 'rgba(12,36,64,0.35)' }}>{expanded ? '▲' : '▼'}</span>
         </div>
       </div>
