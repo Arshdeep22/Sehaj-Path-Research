@@ -76,12 +76,13 @@ export default function TopicDetailPage() {
       }
       setShabads(grouped)
 
-      const { data: authors } = await supabase
-        .from('profiles')
-        .select('id, full_name, username')
-        .in('id', [...authorIds])
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`/api/profiles?ids=${[...authorIds].join(',')}`, {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+      const { profiles } = await res.json()
       const map = {}
-      ;(authors || []).forEach(a => { map[a.id] = a.full_name || a.username })
+      ;(profiles || []).forEach(a => { map[a.id] = a.full_name || a.username })
       setAuthorMap(map)
     } else {
       setShabads({})
