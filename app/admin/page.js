@@ -130,6 +130,9 @@ export default function AdminDashboard() {
             <p style={{ color: 'rgba(12,36,64,0.45)' }}>ਸਾਰੇ ਵਰਤੋਂਕਾਰ ਅਤੇ ਤਰੱਕੀ ਦੇਖੋ</p>
           </div>
           <div className="flex gap-3">
+            <button onClick={() => router.push('/admin/chat-report')} className="btn-ghost text-sm px-4 py-2">
+              💬 ਜਾਪ ਰਿਪੋਰਟ
+            </button>
             <button onClick={() => router.push('/admin/topics')} className="btn-gold text-sm px-4 py-2">
               ✦ ਵਿਸ਼ੇ ਪ੍ਰਬੰਧਨ
             </button>

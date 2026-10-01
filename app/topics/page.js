@@ -15,7 +15,6 @@ export default function TopicsPage() {
 
   const [showAddTopic, setShowAddTopic] = useState(false)
   const [newTopicTitle, setNewTopicTitle] = useState('')
-  const [newTopicDesc, setNewTopicDesc] = useState('')
   const [savingTopic, setSavingTopic] = useState(false)
 
   const [showEditTopic, setShowEditTopic] = useState(null)
@@ -100,7 +99,7 @@ export default function TopicsPage() {
     const res = await fetch('/api/topics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ title: newTopicTitle.trim(), description: newTopicDesc.trim() }),
+      body: JSON.stringify({ title: newTopicTitle.trim(), description: '' }),
     })
     if (res.ok) {
       const { topic } = await res.json()
@@ -108,7 +107,6 @@ export default function TopicsPage() {
       setTopicStats(prev => ({ ...prev, [topic.id]: { angles: 0, shabads: 0 } }))
       setShowAddTopic(false)
       setNewTopicTitle('')
-      setNewTopicDesc('')
     }
     setSavingTopic(false)
   }
@@ -271,7 +269,7 @@ export default function TopicsPage() {
 
       {/* Add Topic Modal */}
       {showAddTopic && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && (setShowAddTopic(false), setNewTopicTitle(''), setNewTopicDesc(''))}>
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && (setShowAddTopic(false), setNewTopicTitle(''))}>
           <div className="modal-box">
             <h3 className="text-xl font-bold mb-5" style={{ color: '#0c2540' }}>ਨਵਾਂ ਵਿਸ਼ਾ ਜੋੜੋ</h3>
             <form onSubmit={handleAddTopic} className="space-y-4">
@@ -279,12 +277,8 @@ export default function TopicsPage() {
                 <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਵਿਸ਼ੇ ਦਾ ਸਿਰਲੇਖ *</label>
                 <input className="input-royal" placeholder="ਗੁਰਮੁਖੀ ਵਿੱਚ ਲਿਖੋ" value={newTopicTitle} onChange={e => setNewTopicTitle(e.target.value)} required autoFocus />
               </div>
-              <div>
-                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਵਰਣਨ (ਵਿਕਲਪਿਕ)</label>
-                <textarea className="textarea-royal" placeholder="ਵਿਸ਼ੇ ਬਾਰੇ ਜਾਣਕਾਰੀ..." value={newTopicDesc} onChange={e => setNewTopicDesc(e.target.value)} rows={3} />
-              </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => { setShowAddTopic(false); setNewTopicTitle(''); setNewTopicDesc('') }} className="btn-ghost flex-1 py-3">ਰੱਦ ਕਰੋ</button>
+                <button type="button" onClick={() => { setShowAddTopic(false); setNewTopicTitle('') }} className="btn-ghost flex-1 py-3">ਰੱਦ ਕਰੋ</button>
                 <button type="submit" disabled={savingTopic} className="btn-gold flex-1 py-3">{savingTopic ? 'ਜੋੜਿਆ ਜਾ ਰਿਹਾ ਹੈ...' : 'ਜੋੜੋ'}</button>
               </div>
             </form>

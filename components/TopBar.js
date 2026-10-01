@@ -19,6 +19,7 @@ export default function TopBar({ profile }) {
     ? [
         { href: '/admin', label: 'ਡੈਸ਼ਬੋਰਡ', Icon: DashboardIcon },
         { href: '/admin/topics', label: 'ਵਿਸ਼ੇ', Icon: TopicsIcon },
+        { href: '/admin/chat-report', label: 'ਜਾਪ', Icon: ChatReportIcon },
         { href: '/leaderboard', label: 'ਸਰਵੋਤਮ', Icon: LeaderboardIcon },
       ]
     : [
@@ -101,6 +102,15 @@ function LeaderboardIcon({ active }) {
       <line x1="18" y1="20" x2="18" y2="10" />
       <line x1="12" y1="20" x2="12" y2="4" />
       <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  )
+}
+
+function ChatReportIcon({ active }) {
+  const c = active ? '#1a5f8f' : 'rgba(12,36,64,0.4)'
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   )
 }
