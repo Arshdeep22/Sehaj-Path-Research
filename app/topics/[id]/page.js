@@ -35,7 +35,10 @@ export default function TopicDetailPage() {
   const [showDeleteTopicConfirm, setShowDeleteTopicConfirm] = useState(false)
   const [deletingTopic, setDeletingTopic] = useState(false)
 
-  // Angle delete
+  // Angle edit / delete
+  const [showEditAngle, setShowEditAngle] = useState(null)
+  const [editAngleTitle, setEditAngleTitle] = useState('')
+  const [savingEditAngle, setSavingEditAngle] = useState(false)
   const [showDeleteAngleConfirm, setShowDeleteAngleConfirm] = useState(null)
   const [deletingAngle, setDeletingAngle] = useState(false)
 
@@ -187,6 +190,22 @@ export default function TopicDetailPage() {
     })
     if (res.ok) router.push('/topics')
     else setDeletingTopic(false)
+  }
+
+  async function handleEditAngle(e) {
+    e.preventDefault()
+    if (!editAngleTitle.trim() || !showEditAngle) return
+    setSavingEditAngle(true)
+    const { error } = await supabase
+      .from('angles')
+      .update({ title: editAngleTitle.trim() })
+      .eq('id', showEditAngle.id)
+      .eq('created_by', profile.id)
+    if (!error) {
+      await loadData()
+      setShowEditAngle(null)
+    }
+    setSavingEditAngle(false)
   }
 
   async function handleDeleteAngle(angle) {
@@ -360,6 +379,7 @@ export default function TopicDetailPage() {
               profileId={profile?.id}
               onToggle={() => setExpandedAngles(p => ({ ...p, [angle.id]: !p[angle.id] }))}
               onAddShabad={() => { setShowAddShabad(angle.id); setShabadText(''); setShabadComment('') }}
+              onEditAngle={() => { setShowEditAngle(angle); setEditAngleTitle(angle.title) }}
               onDeleteAngle={() => setShowDeleteAngleConfirm(angle)}
               onEditShabad={shabad => { setShowEditShabad(shabad); setEditShabadText(shabad.shabad_text); setEditShabadComment(shabad.comment || '') }}
               onDeleteShabad={shabadId => setShowDeleteShabadConfirm(shabadId)}
@@ -456,6 +476,25 @@ export default function TopicDetailPage() {
         </div>
       )}
 
+      {/* ── Edit Angle Modal ── */}
+      {showEditAngle && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowEditAngle(null)}>
+          <div className="modal-box">
+            <h3 className="text-lg font-bold mb-5" style={{ color: '#0c2540' }}>ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਸੰਪਾਦਿਤ ਕਰੋ</h3>
+            <form onSubmit={handleEditAngle} className="space-y-4">
+              <div>
+                <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਸਿਰਲੇਖ *</label>
+                <input className="input-royal" value={editAngleTitle} onChange={e => setEditAngleTitle(e.target.value)} required autoFocus />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setShowEditAngle(null)} className="btn-ghost flex-1 py-3">ਰੱਦ ਕਰੋ</button>
+                <button type="submit" disabled={savingEditAngle} className="btn-royal flex-1 py-3">{savingEditAngle ? 'ਸੰਭਾਲਿਆ ਜਾ ਰਿਹਾ ਹੈ...' : 'ਸੰਭਾਲੋ'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ── Delete Angle Confirm ── */}
       {showDeleteAngleConfirm && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !deletingAngle && setShowDeleteAngleConfirm(null)}>
@@ -518,7 +557,7 @@ export default function TopicDetailPage() {
   )
 }
 
-function AngleSection({ angle, angleIndex, shabads, authorMap, expanded, profileId, onToggle, onAddShabad, onDeleteAngle, onEditShabad, onDeleteShabad }) {
+function AngleSection({ angle, angleIndex, shabads, authorMap, expanded, profileId, onToggle, onAddShabad, onEditAngle, onDeleteAngle, onEditShabad, onDeleteShabad }) {
   const isAngleOwner = angle.created_by === profileId
   return (
     <div className="animate-fadeInUp" style={{ animationDelay: `${angleIndex * 0.06}s` }}>
@@ -529,28 +568,40 @@ function AngleSection({ angle, angleIndex, shabads, authorMap, expanded, profile
         </div>
         <div className="flex-1">
           <h3 className="font-semibold gurbani-text" style={{ color: '#0c2540' }}>{angle.title}</h3>
-          {angle.description && (
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(12,36,64,0.5)' }}>{angle.description}</p>
-          )}
         </div>
         <div className="flex items-center gap-2">
           <span className="badge-royal text-xs">{shabads.length} ਸ਼ਬਦ</span>
           {isAngleOwner && (
-            <button
-              onClick={e => { e.stopPropagation(); onDeleteAngle() }}
-              className="p-1.5 rounded-lg transition-colors"
-              style={{ color: 'rgba(239,68,68,0.45)' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.color = '#ef4444' }}
-              onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'rgba(239,68,68,0.45)' }}
-              title="ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਮਿਟਾਓ"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                <path d="M10 11v6" /><path d="M14 11v6" />
-                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-              </svg>
-            </button>
+            <>
+              <button
+                onClick={e => { e.stopPropagation(); onEditAngle() }}
+                className="p-1.5 rounded-lg transition-colors"
+                style={{ color: 'rgba(26,95,143,0.5)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(14,65,110,0.08)'; e.currentTarget.style.color = '#1a5f8f' }}
+                onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'rgba(26,95,143,0.5)' }}
+                title="ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਸੰਪਾਦਿਤ ਕਰੋ"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); onDeleteAngle() }}
+                className="p-1.5 rounded-lg transition-colors"
+                style={{ color: 'rgba(239,68,68,0.45)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.color = '#ef4444' }}
+                onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'rgba(239,68,68,0.45)' }}
+                title="ਦ੍ਰਿਸ਼ਟੀਕੋਣ ਮਿਟਾਓ"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6" /><path d="M14 11v6" />
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+              </button>
+            </>
           )}
           <span className="text-lg" style={{ color: 'rgba(12,36,64,0.35)' }}>{expanded ? '▲' : '▼'}</span>
         </div>
