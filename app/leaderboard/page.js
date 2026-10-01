@@ -22,24 +22,13 @@ export default function LeaderboardPage() {
       if (!prof || prof.must_change_password) { router.push('/change-password'); return }
       setProfile(prof)
 
-      const { data: users } = await supabase
-        .from('profiles')
-        .select('id, full_name, username, score, created_at')
-        .eq('role', 'user')
-        .order('score', { ascending: false })
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/leaderboard', {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+      const { users, stats } = await res.json()
       setLeaders(users || [])
-
-      if (users?.length) {
-        const stats = {}
-        await Promise.all(users.map(async u => {
-          const [{ count: a }, { count: s }] = await Promise.all([
-            supabase.from('angles').select('*', { count: 'exact', head: true }).eq('created_by', u.id),
-            supabase.from('shabads').select('*', { count: 'exact', head: true }).eq('created_by', u.id),
-          ])
-          stats[u.id] = { angles: a || 0, shabads: s || 0 }
-        }))
-        setUserStats(stats)
-      }
+      setUserStats(stats || {})
 
       setLoading(false)
     }
