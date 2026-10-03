@@ -14,17 +14,16 @@ async function getCallerUser(request) {
   return user || null
 }
 
+const MAX_FEED = 80
+
 export async function GET(request) {
   const user = await getCallerUser(request)
   if (!user) return Response.json({ error: 'ਅਧਿਕਾਰ ਨਹੀਂ' }, { status: 401 })
 
-  const { searchParams } = new URL(request.url)
-  const limit = Math.min(parseInt(searchParams.get('limit') || '15'), 50)
-  const offset = parseInt(searchParams.get('offset') || '0')
-
   const admin = getAdminClient()
 
-  const { data: shabads, error } = await admin
+  // Newest → oldest base order
+  const { data: baseShabads, error } = await admin
     .from('shabads')
     .select(`
       id, shabad_text, comment, created_at,
@@ -35,27 +34,71 @@ export async function GET(request) {
       author:profiles!shabads_created_by_fkey(id, full_name, username)
     `)
     .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1)
+    .limit(MAX_FEED)
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
-  if (!shabads?.length) return Response.json({ shabads: [], likes: {}, currentUserId: user.id })
+  if (!baseShabads?.length) {
+    return Response.json({ shabads: [], likes: {}, views: {}, startIndex: 0, currentUserId: user.id })
+  }
 
-  const shabadIds = shabads.map(s => s.id)
+  const shabadIds = baseShabads.map(s => s.id)
 
-  const { data: likes } = await admin
-    .from('shabad_likes')
-    .select('shabad_id, user_id, liker:profiles!shabad_likes_user_id_fkey(id, full_name, username)')
-    .in('shabad_id', shabadIds)
+  const [{ data: likes }, { data: views }] = await Promise.all([
+    admin
+      .from('shabad_likes')
+      .select('shabad_id, user_id, liker:profiles!shabad_likes_user_id_fkey(id, full_name, username)')
+      .in('shabad_id', shabadIds),
+    admin
+      .from('shabad_views')
+      .select('shabad_id, user_id, viewer:profiles!shabad_views_user_id_fkey(id, full_name, username)')
+      .in('shabad_id', shabadIds),
+  ])
 
   const likesMap = {}
-  const seen = new Set()
+  const likeSeen = new Set()
   for (const like of (likes || [])) {
     const key = `${like.shabad_id}:${like.user_id}`
-    if (seen.has(key)) continue
-    seen.add(key)
+    if (likeSeen.has(key)) continue
+    likeSeen.add(key)
     if (!likesMap[like.shabad_id]) likesMap[like.shabad_id] = []
     likesMap[like.shabad_id].push({ user_id: like.user_id, ...like.liker })
   }
 
-  return Response.json({ shabads, likes: likesMap, currentUserId: user.id })
+  const viewsMap = {}
+  const viewSeen = new Set()
+  const viewedByUser = new Set()
+  for (const v of (views || [])) {
+    const key = `${v.shabad_id}:${v.user_id}`
+    if (viewSeen.has(key)) continue
+    viewSeen.add(key)
+    if (!viewsMap[v.shabad_id]) viewsMap[v.shabad_id] = []
+    viewsMap[v.shabad_id].push({ user_id: v.user_id, ...v.viewer })
+    if (v.user_id === user.id) viewedByUser.add(v.shabad_id)
+  }
+
+  // Split preserving newest→oldest order
+  const unviewed = baseShabads.filter(s => !viewedByUser.has(s.id))   // newest → oldest
+  const viewed = baseShabads.filter(s => viewedByUser.has(s.id))      // newest → oldest
+
+  let ordered
+  let startIndex
+  if (unviewed.length > 0) {
+    // Viewed above (oldest → newest, so newest viewed sits just above the boundary),
+    // then unviewed below (newest → oldest). Open at the first unviewed card.
+    const viewedAbove = [...viewed].reverse()
+    ordered = [...viewedAbove, ...unviewed]
+    startIndex = viewedAbove.length
+  } else {
+    // Everything seen → normal newest → oldest from the top
+    ordered = baseShabads
+    startIndex = 0
+  }
+
+  return Response.json({
+    shabads: ordered,
+    likes: likesMap,
+    views: viewsMap,
+    startIndex,
+    currentUserId: user.id,
+  })
 }

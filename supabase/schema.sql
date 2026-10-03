@@ -177,6 +177,25 @@ CREATE POLICY "Users can remove their own likes"
   ON public.shabad_likes FOR DELETE
   USING (auth.uid() = user_id);
 
+-- Shabad views (for ਝਲਕ feed — tracks who has seen each card)
+CREATE TABLE IF NOT EXISTS public.shabad_views (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  shabad_id UUID NOT NULL REFERENCES public.shabads(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(shabad_id, user_id)
+);
+
+ALTER TABLE public.shabad_views ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "All authenticated users can view views"
+  ON public.shabad_views FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY "Users can add their own views"
+  ON public.shabad_views FOR INSERT
+  WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = user_id);
+
 -- =====================================================
 -- Grant permissions
 -- =====================================================
@@ -186,3 +205,4 @@ GRANT ALL ON public.topics TO authenticated;
 GRANT ALL ON public.angles TO authenticated;
 GRANT ALL ON public.shabads TO authenticated;
 GRANT ALL ON public.shabad_likes TO authenticated;
+GRANT ALL ON public.shabad_views TO authenticated;

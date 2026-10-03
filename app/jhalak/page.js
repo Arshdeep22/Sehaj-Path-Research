@@ -20,11 +20,12 @@ function timeAgo(dateStr) {
 function FeedCard({ item, currentUserId, onLike, isActive }) {
   const router = useRouter()
   const [showLikers, setShowLikers] = useState(false)
-  const [likeAnimating, setLikeAnimating] = useState(false)
-  const inFlightRef = useRef(false)
+  const [showViewers, setShowViewers] = useState(false)
+  const [likePop, setLikePop] = useState(0)
   const longPressTimer = useRef(null)
 
   const likers = item.likers || []
+  const viewers = item.viewers || []
   const isLiked = likers.some(l => l.user_id === currentUserId)
 
   function handleCardClick() {
@@ -35,25 +36,16 @@ function FeedCard({ item, currentUserId, onLike, isActive }) {
     }
   }
 
-  async function handleLike(e) {
+  function handleLike(e) {
     e.stopPropagation()
-    if (inFlightRef.current) return
-    inFlightRef.current = true
-    setLikeAnimating(true)
-    try {
-      await onLike(item.id)
-    } finally {
-      setLikeAnimating(false)
-      inFlightRef.current = false
-    }
+    setLikePop(n => n + 1)   // retriggers the pop animation on every click
+    onLike(item.id)          // fire-and-forget — UI already updates optimistically
   }
 
-  function handleTouchStart() {
-    if (likers.length > 0) {
-      longPressTimer.current = setTimeout(() => setShowLikers(true), 550)
-    }
+  function startLongPress(setter, count) {
+    if (count > 0) longPressTimer.current = setTimeout(() => setter(true), 500)
   }
-  function handleTouchEnd() {
+  function endLongPress() {
     clearTimeout(longPressTimer.current)
   }
 
@@ -122,17 +114,19 @@ function FeedCard({ item, currentUserId, onLike, isActive }) {
         </div>
       )}
 
-      {/* Footer: like button */}
-      <div className="feed-card-footer">
+      {/* Footer: like + view */}
+      <div className="feed-card-footer" style={{ gap: '10px' }}>
+        {/* Like */}
         <div className="relative">
           <button
+            key={likePop}
             className={`feed-like-btn${isLiked ? ' liked' : ''}`}
             onClick={handleLike}
             onMouseEnter={() => likers.length > 0 && setShowLikers(true)}
             onMouseLeave={() => setShowLikers(false)}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-            style={likeAnimating ? { animation: 'likePopIn 0.32s ease-out' } : {}}
+            onTouchStart={() => startLongPress(setShowLikers, likers.length)}
+            onTouchEnd={endLongPress}
+            style={likePop > 0 ? { animation: 'likePopIn 0.32s ease-out' } : {}}
           >
             <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🙏🏻</span>
             <span className="font-semibold text-sm ml-1.5">{likers.length}</span>
@@ -163,6 +157,50 @@ function FeedCard({ item, currentUserId, onLike, isActive }) {
             </div>
           )}
         </div>
+
+        {/* Views */}
+        <div className="relative">
+          <button
+            className="feed-view-btn"
+            onClick={e => { e.stopPropagation(); if (viewers.length > 0) setShowViewers(v => !v) }}
+            onMouseEnter={() => viewers.length > 0 && setShowViewers(true)}
+            onMouseLeave={() => setShowViewers(false)}
+            onTouchStart={() => startLongPress(setShowViewers, viewers.length)}
+            onTouchEnd={endLongPress}
+            title="ਕਿੰਨਿਆਂ ਨੇ ਵੇਖਿਆ"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span className="font-semibold text-sm ml-1.5">{viewers.length}</span>
+          </button>
+
+          {showViewers && viewers.length > 0 && (
+            <div
+              className="feed-likers-tooltip"
+              onMouseEnter={() => setShowViewers(true)}
+              onMouseLeave={() => setShowViewers(false)}
+            >
+              <p className="text-xs font-semibold mb-2" style={{ color: 'rgba(12,36,64,0.45)', letterSpacing: '0.04em' }}>
+                ਵੇਖਣ ਵਾਲੇ
+              </p>
+              {viewers.map(v => (
+                <div key={v.user_id} className="flex items-center gap-2 mb-1.5 last:mb-0">
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center font-bold flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #1a5f8f, #0c2540)', color: 'white', fontSize: '9px' }}
+                  >
+                    {(v.full_name || v.username || '?')[0].toUpperCase()}
+                  </div>
+                  <span className="text-xs" style={{ color: '#0c2540' }}>
+                    {v.full_name || v.username}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -184,16 +222,16 @@ export default function JhalakPage() {
   const [profile, setProfile] = useState(null)
   const [shabads, setShabads] = useState([])
   const [likes, setLikes] = useState({})
+  const [views, setViews] = useState({})
   const [currentUserId, setCurrentUserId] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
   const [activeIndex, setActiveIndex] = useState(0)
   const tokenRef = useRef(null)
-  const likingRef = useRef(new Set())
   const reelRef = useRef(null)
-  const loadMoreRef = useRef(null)
-  const PAGE = 15
+  const likeQueueRef = useRef({})     // shabadId -> { desired, running }
+  const viewedRef = useRef(new Set()) // shabadIds already marked viewed this session
+  const startIndexRef = useRef(0)
+  const didInitScrollRef = useRef(false)
 
   useEffect(() => {
     async function init() {
@@ -208,80 +246,156 @@ export default function JhalakPage() {
       const { data: { session } } = await supabase.auth.getSession()
       tokenRef.current = session?.access_token
 
-      const res = await fetch(`/api/feed?limit=${PAGE}&offset=0`, {
+      const res = await fetch('/api/feed', {
         headers: { Authorization: `Bearer ${session?.access_token}` },
       })
       const data = await res.json()
       setShabads(data.shabads || [])
       setLikes(data.likes || {})
-      if ((data.shabads || []).length < PAGE) setHasMore(false)
+      setViews(data.views || {})
+      startIndexRef.current = data.startIndex || 0
+      setActiveIndex(data.startIndex || 0)
+      // Anything already viewed shouldn't be re-posted this session
+      for (const s of (data.shabads || [])) {
+        if ((data.views?.[s.id] || []).some(v => v.user_id === user.id)) viewedRef.current.add(s.id)
+      }
 
       setLoading(false)
     }
     init()
   }, [router])
 
-  async function loadMore() {
-    if (loadingMore || !hasMore) return
-    setLoadingMore(true)
-    const res = await fetch(`/api/feed?limit=${PAGE}&offset=${shabads.length}`, {
-      headers: { Authorization: `Bearer ${tokenRef.current}` },
-    })
-    const data = await res.json()
-    setShabads(prev => [...prev, ...(data.shabads || [])])
-    setLikes(prev => ({ ...prev, ...(data.likes || {}) }))
-    if ((data.shabads || []).length < PAGE) setHasMore(false)
-    setLoadingMore(false)
-  }
-  loadMoreRef.current = loadMore
+  const feedItems = shabads.map(s => ({ ...s, likers: likes[s.id] || [], viewers: views[s.id] || [] }))
 
-  const feedItems = shabads.map(s => ({ ...s, likers: likes[s.id] || [] }))
-
-  // Track which card is centered in the reel → it becomes the active (focused) card
+  // Active-card detection + initial positioning, driven by scroll position.
+  // Using the nearest slide to the scroll offset guarantees exactly one active
+  // card at all times (even mid-scroll), unlike a visibility-threshold observer.
   useEffect(() => {
     if (loading) return
     const root = reelRef.current
     if (!root) return
-    const slides = root.querySelectorAll('[data-slide]')
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting && e.intersectionRatio >= 0.55) {
-            setActiveIndex(Number(e.target.dataset.slide))
-          }
-        }
-      },
-      { root, threshold: [0.55, 0.8] }
-    )
-    slides.forEach(s => observer.observe(s))
-    return () => observer.disconnect()
+
+    function computeActive() {
+      const list = root.querySelectorAll('[data-slide]')
+      if (!list.length) return
+      const pos = root.scrollTop
+      let best = 0
+      let bestDist = Infinity
+      for (const el of list) {
+        const d = Math.abs(el.offsetTop - pos)
+        if (d < bestDist) { bestDist = d; best = Number(el.dataset.slide) }
+      }
+      setActiveIndex(best)
+    }
+
+    // Jump straight to the first unviewed card on the first load (no animation)
+    if (!didInitScrollRef.current) {
+      didInitScrollRef.current = true
+      const target = root.querySelector(`[data-slide="${startIndexRef.current}"]`)
+      if (target) root.scrollTop = target.offsetTop
+    }
+    computeActive()
+
+    let raf = 0
+    function onScroll() {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(computeActive)
+    }
+    root.addEventListener('scroll', onScroll, { passive: true })
+    return () => { root.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
   }, [loading, feedItems.length])
 
-  // Pre-load the next page a few cards before the end
+  // Mark the focused card as viewed (records who has seen it) — background, fire-and-forget
   useEffect(() => {
-    if (!loading && activeIndex >= feedItems.length - 3) loadMoreRef.current?.()
-  }, [activeIndex, feedItems.length, loading])
+    if (loading) return
+    const item = feedItems[activeIndex]
+    if (!item || viewedRef.current.has(item.id)) return
+    viewedRef.current.add(item.id)
 
-  async function handleLike(shabadId) {
-    if (likingRef.current.has(shabadId)) return
-    likingRef.current.add(shabadId)
-    try {
-      const res = await fetch(`/api/feed/${shabadId}/like`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${tokenRef.current}` },
-      })
-      const data = await res.json()
-      setLikes(prev => {
-        const current = prev[shabadId] || []
-        if (data.liked) {
-          const newLiker = { user_id: currentUserId, ...(data.liker || {}) }
-          const deduped = current.filter(l => l.user_id !== currentUserId)
-          return { ...prev, [shabadId]: [...deduped, newLiker] }
+    // optimistic: add me to this card's viewers
+    setViews(prev => {
+      const current = prev[item.id] || []
+      if (current.some(v => v.user_id === currentUserId)) return prev
+      return {
+        ...prev,
+        [item.id]: [...current, { user_id: currentUserId, full_name: profile?.full_name, username: profile?.username }],
+      }
+    })
+
+    fetch(`/api/feed/${item.id}/view`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tokenRef.current}` },
+    }).catch(() => {})
+  }, [activeIndex, loading])
+
+  // Instant optimistic toggle; the backend is reconciled in the background.
+  function handleLike(shabadId) {
+    const currentlyLiked = (likes[shabadId] || []).some(l => l.user_id === currentUserId)
+    const nextLiked = !currentlyLiked
+
+    // 1. Update the UI immediately — no waiting on the network
+    setLikes(prev => {
+      const current = prev[shabadId] || []
+      const without = current.filter(l => l.user_id !== currentUserId)
+      if (nextLiked) {
+        return {
+          ...prev,
+          [shabadId]: [...without, { user_id: currentUserId, full_name: profile?.full_name, username: profile?.username }],
         }
-        return { ...prev, [shabadId]: current.filter(l => l.user_id !== currentUserId) }
-      })
+      }
+      return { ...prev, [shabadId]: without }
+    })
+
+    // 2. Hand the desired state to the per-shabad background queue
+    enqueueLikeSync(shabadId, nextLiked)
+  }
+
+  // Per-shabad FIFO queue: processes one request at a time, always syncing to the
+  // latest desired state. Rapid clicks collapse to the final intent.
+  async function enqueueLikeSync(shabadId, desired) {
+    const q = likeQueueRef.current
+    const entry = q[shabadId] || (q[shabadId] = { desired, running: false })
+    entry.desired = desired
+
+    if (entry.running) return
+    entry.running = true
+
+    try {
+      while (true) {
+        const want = entry.desired
+        let ok = false
+        try {
+          const res = await fetch(`/api/feed/${shabadId}/like`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenRef.current}` },
+            body: JSON.stringify({ liked: want }),
+          })
+          ok = res.ok
+        } catch {
+          ok = false
+        }
+
+        // Someone clicked again while we were waiting → process the new intent next
+        if (entry.desired !== want) continue
+
+        // Settled. On failure, revert the UI to the real (unchanged) state.
+        if (!ok) {
+          setLikes(prev => {
+            const current = prev[shabadId] || []
+            const without = current.filter(l => l.user_id !== currentUserId)
+            if (!want) {
+              return {
+                ...prev,
+                [shabadId]: [...without, { user_id: currentUserId, full_name: profile?.full_name, username: profile?.username }],
+              }
+            }
+            return { ...prev, [shabadId]: without }
+          })
+        }
+        break
+      }
     } finally {
-      likingRef.current.delete(shabadId)
+      q[shabadId].running = false
     }
   }
 
@@ -325,11 +439,9 @@ export default function JhalakPage() {
           </div>
         ))}
 
-        {!hasMore && (
-          <div className="feed-slide feed-slide-end">
-            <span style={{ color: 'rgba(12,36,64,0.3)', fontSize: '1.5rem' }}>ੴ</span>
-          </div>
-        )}
+        <div className="feed-slide feed-slide-end">
+          <span style={{ color: 'rgba(12,36,64,0.3)', fontSize: '1.5rem' }}>ੴ</span>
+        </div>
       </div>
 
       {/* Swipe hint */}

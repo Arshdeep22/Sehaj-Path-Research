@@ -621,6 +621,23 @@ html, body {
     box-shadow: 0 0 12px rgba(245,158,11,0.15);
   }
 
+  .feed-view-btn {
+    @apply flex items-center px-3 py-2 rounded-xl transition-all select-none;
+    background: rgba(14,65,110,0.05);
+    border: 1px solid rgba(14,65,110,0.1);
+    color: rgba(12,36,64,0.55);
+  }
+
+  .feed-view-btn:hover {
+    background: rgba(14,65,110,0.1);
+    border-color: rgba(14,65,110,0.2);
+    transform: scale(1.06);
+  }
+
+  .feed-view-btn:active {
+    transform: scale(0.94);
+  }
+
   .feed-likers-tooltip {
     position: absolute;
     bottom: calc(100% + 10px);
