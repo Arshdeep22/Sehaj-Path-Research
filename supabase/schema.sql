@@ -154,6 +154,29 @@ CREATE POLICY "Users can delete their own shabads, admins can delete all"
   ON public.shabads FOR DELETE
   USING (auth.uid() = created_by OR public.is_admin());
 
+-- Shabad likes (for ਝਲਕ feed)
+CREATE TABLE IF NOT EXISTS public.shabad_likes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  shabad_id UUID NOT NULL REFERENCES public.shabads(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(shabad_id, user_id)
+);
+
+ALTER TABLE public.shabad_likes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "All authenticated users can view likes"
+  ON public.shabad_likes FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY "Users can add their own likes"
+  ON public.shabad_likes FOR INSERT
+  WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = user_id);
+
+CREATE POLICY "Users can remove their own likes"
+  ON public.shabad_likes FOR DELETE
+  USING (auth.uid() = user_id);
+
 -- =====================================================
 -- Grant permissions
 -- =====================================================
@@ -162,3 +185,4 @@ GRANT ALL ON public.profiles TO authenticated;
 GRANT ALL ON public.topics TO authenticated;
 GRANT ALL ON public.angles TO authenticated;
 GRANT ALL ON public.shabads TO authenticated;
+GRANT ALL ON public.shabad_likes TO authenticated;

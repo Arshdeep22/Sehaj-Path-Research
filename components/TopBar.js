@@ -24,6 +24,7 @@ export default function TopBar({ profile }) {
       ]
     : [
         { href: '/topics', label: 'ਵਿਸ਼ੇ', Icon: TopicsIcon },
+        { href: '/jhalak', label: 'ਸਾਂਝ', Icon: JhalakIcon },
         { href: '/leaderboard', label: 'ਸਰਵੋਤਮ', Icon: LeaderboardIcon },
       ]
 
@@ -123,6 +124,17 @@ function DashboardIcon({ active }) {
       <rect x="13" y="3" width="8" height="8" rx="1" />
       <rect x="13" y="13" width="8" height="8" rx="1" />
       <rect x="3" y="13" width="8" height="8" rx="1" />
+    </svg>
+  )
+}
+
+function JhalakIcon({ active }) {
+  const c = active ? '#1a5f8f' : 'rgba(12,36,64,0.4)'
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <line x1="9" y1="10" x2="15" y2="10" />
+      <line x1="9" y1="14" x2="13" y2="14" />
     </svg>
   )
 }

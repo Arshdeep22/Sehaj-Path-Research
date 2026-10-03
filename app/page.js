@@ -39,7 +39,7 @@ export default function LoginPage() {
     } else if (profile?.role === 'admin') {
       router.push('/admin')
     } else {
-      router.push('/topics')
+      router.push('/jhalak')
     }
   }
 

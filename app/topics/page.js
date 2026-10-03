@@ -67,6 +67,7 @@ export default function TopicsPage() {
           stats[t.id] = { angles: ta.length, shabads: allShabads.filter(s => taIds.has(s.angle_id)).length }
         }
         setTopicStats(stats)
+        setTopics([...list].sort((a, b) => (stats[b.id]?.shabads || 0) - (stats[a.id]?.shabads || 0)))
       }
 
       setLoading(false)

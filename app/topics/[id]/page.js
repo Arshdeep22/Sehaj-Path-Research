@@ -110,6 +110,24 @@ export default function TopicDetailPage() {
     init()
   }, [topicId, router, loadData])
 
+  useEffect(() => {
+    if (loading) return
+    const params = new URLSearchParams(window.location.search)
+    const openAngle = params.get('openAngle')
+    if (!openAngle) return
+    setExpandedAngles(prev => ({ ...prev, [openAngle]: true }))
+    const hash = window.location.hash.slice(1)
+    if (hash) {
+      setTimeout(() => {
+        const el = document.getElementById(hash)
+        if (!el) return
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('shabad-highlight')
+        setTimeout(() => el.classList.remove('shabad-highlight'), 2500)
+      }, 350)
+    }
+  }, [loading])
+
   async function getToken() {
     const { data: { session } } = await supabase.auth.getSession()
     return session?.access_token
@@ -619,7 +637,7 @@ function AngleSection({ angle, angleIndex, shabads, authorMap, expanded, profile
           {shabads.map(shabad => {
             const isOwner = shabad.created_by === profileId
             return (
-              <div key={shabad.id} className="shabad-card">
+              <div key={shabad.id} id={`shabad-${shabad.id}`} className="shabad-card">
                 <p className="gurbani-text text-base leading-relaxed mb-2 whitespace-pre-wrap" style={{ color: '#0c2540' }}>
                   {shabad.shabad_text}
                 </p>
