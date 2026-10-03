@@ -25,6 +25,8 @@ export async function PATCH(request, { params }) {
   const profile = await getCallerProfile(request)
   if (!profile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { id } = await params
+
   const body = await request.json()
   const title = body?.title?.trim()
   const description = body?.description?.trim() || null
@@ -34,7 +36,7 @@ export async function PATCH(request, { params }) {
   const { data: existing } = await supabaseAdmin
     .from('topics')
     .select('created_by')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (!existing || (existing.created_by !== profile.id && profile.role !== 'admin')) {
@@ -44,7 +46,7 @@ export async function PATCH(request, { params }) {
   const { data, error } = await supabaseAdmin
     .from('topics')
     .update({ title, description })
-    .eq('id', params.id)
+    .eq('id', id)
     .select()
     .single()
 
@@ -56,11 +58,13 @@ export async function DELETE(request, { params }) {
   const profile = await getCallerProfile(request)
   if (!profile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { id } = await params
+
   const supabaseAdmin = getAdminClient()
   const { data: existing } = await supabaseAdmin
     .from('topics')
     .select('created_by')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (!existing || (existing.created_by !== profile.id && profile.role !== 'admin')) {
@@ -71,15 +75,15 @@ export async function DELETE(request, { params }) {
   const { data: topicAngles } = await supabaseAdmin
     .from('angles')
     .select('id')
-    .eq('topic_id', params.id)
+    .eq('topic_id', id)
 
   if (topicAngles?.length) {
     const angleIds = topicAngles.map(a => a.id)
     await supabaseAdmin.from('shabads').delete().in('angle_id', angleIds)
-    await supabaseAdmin.from('angles').delete().eq('topic_id', params.id)
+    await supabaseAdmin.from('angles').delete().eq('topic_id', id)
   }
 
-  const { error } = await supabaseAdmin.from('topics').delete().eq('id', params.id)
+  const { error } = await supabaseAdmin.from('topics').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
