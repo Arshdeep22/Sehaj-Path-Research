@@ -169,9 +169,14 @@ export default function TopBar({ profile }) {
 
           <button
             onClick={handleLogout}
-            className="text-xs px-3 py-2 rounded-lg transition-all"
-            style={{ color: 'rgba(12,36,64,0.6)', background: 'rgba(14,65,110,0.07)', border: '1px solid rgba(14,65,110,0.12)' }}>
-            ਬਾਹਰ
+            title="ਬਾਹਰ"
+            aria-label="Logout"
+            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+            style={{ color: 'rgba(12,36,64,0.6)', background: 'rgba(14,65,110,0.07)', border: '1px solid rgba(14,65,110,0.12)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.25)'; e.currentTarget.style.color = '#ef4444' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(14,65,110,0.07)'; e.currentTarget.style.borderColor = 'rgba(14,65,110,0.12)'; e.currentTarget.style.color = 'rgba(12,36,64,0.6)' }}
+          >
+            <LogoutIcon />
           </button>
         </div>
       </div>
@@ -257,6 +262,16 @@ function QuestionIcon({ active }) {
       <circle cx="12" cy="12" r="10" />
       <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
       <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  )
+}
+
+function LogoutIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
     </svg>
   )
 }
