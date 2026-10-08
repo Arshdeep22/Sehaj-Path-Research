@@ -129,7 +129,10 @@ export default function AdminDashboard() {
             <h1 className="text-3xl font-bold mb-1" style={{ color: '#0c2540' }}>ਪ੍ਰਬੰਧਕ ਪੈਨਲ</h1>
             <p style={{ color: 'rgba(12,36,64,0.45)' }}>ਸਾਰੇ ਵਰਤੋਂਕਾਰ ਅਤੇ ਤਰੱਕੀ ਦੇਖੋ</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap justify-end">
+            <button onClick={() => router.push('/admin/weekly-leaderboard')} className="btn-ghost text-sm px-4 py-2">
+              📜 ਪਿਛਲਾ ਹਫ਼ਤਾ
+            </button>
             <button onClick={() => router.push('/admin/chat-report')} className="btn-ghost text-sm px-4 py-2">
               💬 ਜਾਪ ਰਿਪੋਰਟ
             </button>

@@ -191,6 +191,33 @@ CREATE POLICY "Users manage their own push subscriptions"
   WITH CHECK (auth.uid() = user_id);
 
 -- =====================================================
+-- Weekly leaderboard snapshot
+-- Written by the Sunday cron right before scores are reset.
+-- Only holds the MOST RECENT week — the cron wipes the previous week first.
+-- Admin-only visibility via RLS; the cron writes with the service-role key.
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.weekly_leaderboard (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  full_name TEXT NOT NULL,       -- snapshotted so the row stays readable even if the profile is later deleted
+  username TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  rank INTEGER NOT NULL,
+  snapshot_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_weekly_leaderboard_rank ON public.weekly_leaderboard (rank);
+
+ALTER TABLE public.weekly_leaderboard ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Only admins can view weekly leaderboard"
+  ON public.weekly_leaderboard FOR SELECT
+  USING (public.is_admin());
+
+-- (No INSERT/DELETE policies on purpose — only the service-role cron writes it,
+-- which bypasses RLS. Regular users and admins cannot mutate the snapshot from the UI.)
+
+-- =====================================================
 -- Grant permissions
 -- =====================================================
 GRANT USAGE ON SCHEMA public TO authenticated;
@@ -200,3 +227,4 @@ GRANT ALL ON public.angles TO authenticated;
 GRANT ALL ON public.shabads TO authenticated;
 GRANT ALL ON public.shabad_views TO authenticated;
 GRANT ALL ON public.push_subscriptions TO authenticated;
+GRANT SELECT ON public.weekly_leaderboard TO authenticated;
