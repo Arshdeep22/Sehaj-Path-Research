@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../../lib/supabaseClient'
+import { getCache, setCache, removeCache, useIsomorphicLayoutEffect } from '../../../lib/clientCache'
 import { notifyShabadAdded } from '../../../lib/push'
 import TopBar from '../../../components/TopBar'
 
@@ -17,6 +18,7 @@ export default function TopicDetailPage() {
   const [shabads, setShabads] = useState({})
   const [authorMap, setAuthorMap] = useState({})
   const [loading, setLoading] = useState(true)
+  const topicRef = useRef(null)   // mirrors `topic` so loadData can cache it
 
   const [expandedAngles, setExpandedAngles] = useState({})
   const [showAddAngle, setShowAddAngle] = useState(false)
@@ -57,11 +59,15 @@ export default function TopicDetailPage() {
       .select('*')
       .eq('topic_id', topicId)
       .order('created_at', { ascending: true })
-    setAngles(anglesData || [])
+    const angleList = anglesData || []
+    setAngles(angleList)
 
-    if (anglesData?.length) {
-      const angleIds = anglesData.map(a => a.id)
-      const authorIds = new Set(anglesData.map(a => a.created_by))
+    let grouped = {}
+    let map = {}
+
+    if (angleList.length) {
+      const angleIds = angleList.map(a => a.id)
+      const authorIds = new Set(angleList.map(a => a.created_by))
 
       const { data: allShabadsData } = await supabase
         .from('shabads')
@@ -69,8 +75,7 @@ export default function TopicDetailPage() {
         .in('angle_id', angleIds)
         .order('created_at', { ascending: true })
 
-      const grouped = {}
-      for (const angle of anglesData) grouped[angle.id] = []
+      for (const angle of angleList) grouped[angle.id] = []
       for (const s of allShabadsData || []) {
         grouped[s.angle_id]?.push(s)
         authorIds.add(s.created_by)
@@ -82,13 +87,37 @@ export default function TopicDetailPage() {
         headers: { Authorization: `Bearer ${session?.access_token}` },
       })
       const { profiles } = await res.json()
-      const map = {}
       ;(profiles || []).forEach(a => { map[a.id] = a.full_name || a.username })
       setAuthorMap(map)
     } else {
       setShabads({})
     }
+
+    // Refresh the per-topic cache for instant render next time
+    setCache(`topic:${topicId}`, { topic: topicRef.current, angles: angleList, shabads: grouped, authorMap: map })
   }, [topicId])
+
+  // Instant paint from the persisted per-topic cache (before paint — no flash)
+  useIsomorphicLayoutEffect(() => {
+    const p = getCache('profile')
+    if (p) setProfile(p)
+    const c = getCache(`topic:${topicId}`)
+    if (c && c.topic) {
+      setTopic(c.topic); topicRef.current = c.topic
+      setAngles(c.angles || [])
+      setShabads(c.shabads || {})
+      setAuthorMap(c.authorMap || {})
+      setLoading(false)
+    } else {
+      // navigating to an uncached topic → reset to a clean loading state
+      setTopic(null); topicRef.current = null
+      setAngles([]); setShabads({}); setAuthorMap({})
+      setLoading(true)
+    }
+  }, [topicId])
+
+  // Keep topicRef in sync for edits (so cache writes capture the latest topic)
+  useEffect(() => { topicRef.current = topic }, [topic])
 
   useEffect(() => {
     async function init() {
@@ -102,8 +131,10 @@ export default function TopicDetailPage() {
 
       if (!prof || prof.must_change_password) { router.push('/change-password'); return }
       setProfile(prof)
+      setCache('profile', prof)
       if (!topicData) { router.push('/topics'); return }
       setTopic(topicData)
+      topicRef.current = topicData
 
       await loadData()
       setLoading(false)
@@ -209,7 +240,11 @@ export default function TopicDetailPage() {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` },
     })
-    if (res.ok) router.push('/topics')
+    if (res.ok) {
+      removeCache(`topic:${topicId}`)   // don't serve a deleted topic from cache
+      removeCache('topics')             // list counts changed — force a fresh list
+      router.push('/topics')
+    }
     else setDeletingTopic(false)
   }
 
