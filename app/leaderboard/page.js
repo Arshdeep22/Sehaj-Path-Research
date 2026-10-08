@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
+import { getCache, setCache, useIsomorphicLayoutEffect } from '../../lib/clientCache'
 import TopBar from '../../components/TopBar'
 
 export default function LeaderboardPage() {
@@ -11,6 +12,18 @@ export default function LeaderboardPage() {
   const [leaders, setLeaders] = useState([])
   const [userStats, setUserStats] = useState({})
   const [loading, setLoading] = useState(true)
+
+  // Instant paint from the persisted cache (before the browser paints — no flash)
+  useIsomorphicLayoutEffect(() => {
+    const p = getCache('profile')
+    const c = getCache('leaderboard')
+    if (p) setProfile(p)
+    if (c && p) {
+      setLeaders(c.leaders || [])
+      setUserStats(c.userStats || {})
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -21,6 +34,7 @@ export default function LeaderboardPage() {
         .from('profiles').select('*').eq('id', user.id).single()
       if (!prof || prof.must_change_password) { router.push('/change-password'); return }
       setProfile(prof)
+      setCache('profile', prof)
 
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/leaderboard', {
@@ -29,6 +43,7 @@ export default function LeaderboardPage() {
       const { users, stats } = await res.json()
       setLeaders(users || [])
       setUserStats(stats || {})
+      setCache('leaderboard', { leaders: users || [], userStats: stats || {} })
 
       setLoading(false)
     }

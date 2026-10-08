@@ -338,6 +338,31 @@ html, body {
     line-height: 1;
   }
 
+  /* ---- Nav icon + unread badge ---- */
+  .nav-icon-wrap {
+    position: relative;
+    display: inline-flex;
+    line-height: 0;
+  }
+
+  .nav-badge {
+    position: absolute;
+    top: -6px;
+    right: -9px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 9999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 17px;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.45);
+    border: 1.5px solid rgba(255, 255, 255, 0.95);
+  }
+
   /* ---- Page Body wrapper (accounts for top + bottom nav) ---- */
   .page-body {
     min-height: 100vh;
@@ -470,6 +495,17 @@ html, body {
   }
 
   .feed-card::-webkit-scrollbar { display: none; }
+
+  /* ---- Skeleton shimmer (feed loading) ---- */
+  .sk-box {
+    border-radius: 6px;
+    background: linear-gradient(100deg,
+      rgba(14,65,110,0.07) 30%,
+      rgba(14,65,110,0.14) 50%,
+      rgba(14,65,110,0.07) 70%);
+    background-size: 200% 100%;
+    animation: skShimmer 1.3s ease-in-out infinite;
+  }
 
   /* ---- Feed Reel: one-card vertical swipe pager ---- */
   .feed-reel {
@@ -806,4 +842,9 @@ html, body {
 @keyframes hintBounce {
   0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.45; }
   50% { transform: translateX(-50%) translateY(7px); opacity: 1; }
+}
+
+@keyframes skShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

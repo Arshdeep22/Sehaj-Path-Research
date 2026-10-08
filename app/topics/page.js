@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
+import { getCache, setCache, useIsomorphicLayoutEffect } from '../../lib/clientCache'
 import TopBar from '../../components/TopBar'
 
 export default function TopicsPage() {
@@ -12,6 +13,18 @@ export default function TopicsPage() {
   const [topicStats, setTopicStats] = useState({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+
+  // Instant paint from the persisted cache (before the browser paints — no flash)
+  useIsomorphicLayoutEffect(() => {
+    const p = getCache('profile')
+    const c = getCache('topics')
+    if (p) setProfile(p)
+    if (c && p) {
+      setTopics(c.topics || [])
+      setTopicStats(c.topicStats || {})
+      setLoading(false)
+    }
+  }, [])
 
   const [showAddTopic, setShowAddTopic] = useState(false)
   const [newTopicTitle, setNewTopicTitle] = useState('')
@@ -39,9 +52,9 @@ export default function TopicsPage() {
       if (prof.must_change_password) { router.push('/change-password'); return }
       if (prof.role === 'admin') { router.push('/admin'); return }
       setProfile(prof)
+      setCache('profile', prof)
 
       const list = topicsData || []
-      setTopics(list)
 
       if (list.length) {
         const topicIds = list.map(t => t.id)
@@ -66,8 +79,16 @@ export default function TopicsPage() {
           const taIds = new Set(ta.map(a => a.id))
           stats[t.id] = { angles: ta.length, shabads: allShabads.filter(s => taIds.has(s.angle_id)).length }
         }
+        // Only ever set the sorted list (most shabads first) so the order never
+        // flashes/shifts — including when revalidating over cached data.
+        const sorted = [...list].sort((a, b) => (stats[b.id]?.shabads || 0) - (stats[a.id]?.shabads || 0))
         setTopicStats(stats)
-        setTopics([...list].sort((a, b) => (stats[b.id]?.shabads || 0) - (stats[a.id]?.shabads || 0)))
+        setTopics(sorted)
+        setCache('topics', { topics: sorted, topicStats: stats })
+      } else {
+        setTopics([])
+        setTopicStats({})
+        setCache('topics', { topics: [], topicStats: {} })
       }
 
       setLoading(false)

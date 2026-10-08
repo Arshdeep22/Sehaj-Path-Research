@@ -1,19 +1,50 @@
 'use client'
 
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
+import { clearCache } from '../lib/clientCache'
 
 export default function TopBar({ profile }) {
   const router = useRouter()
   const pathname = usePathname()
+  const [unread, setUnread] = useState(0)
+  const pendingRef = useRef(0)   // views applied locally before the next count fetch
 
   async function handleLogout() {
+    clearCache()
     await supabase.auth.signOut()
     router.push('/')
   }
 
   const isAdmin = profile?.role === 'admin'
+
+  // Unread shabads = total shabads the user hasn't viewed yet (feed badge)
+  useEffect(() => {
+    if (!profile?.id || isAdmin) return
+    let cancelled = false
+    pendingRef.current = 0   // a fresh fetch reflects the latest server truth
+    async function countUnread() {
+      const [{ count: total }, { count: viewed }] = await Promise.all([
+        supabase.from('shabads').select('id', { count: 'exact', head: true }),
+        supabase.from('shabad_views').select('shabad_id', { count: 'exact', head: true }).eq('user_id', profile.id),
+      ])
+      if (!cancelled) setUnread(Math.max(0, (total || 0) - (viewed || 0) - pendingRef.current))
+    }
+    countUnread()
+    return () => { cancelled = true }
+  }, [profile?.id, isAdmin, pathname])
+
+  // Decrement live as the feed marks cards viewed — no extra API call
+  useEffect(() => {
+    function onViewed() {
+      pendingRef.current += 1
+      setUnread(n => Math.max(0, n - 1))
+    }
+    window.addEventListener('shabad:viewed', onViewed)
+    return () => window.removeEventListener('shabad:viewed', onViewed)
+  }, [])
 
   const navLinks = isAdmin
     ? [
@@ -24,7 +55,7 @@ export default function TopBar({ profile }) {
       ]
     : [
         { href: '/topics', label: 'ਵਿਸ਼ੇ', Icon: TopicsIcon },
-        { href: '/jhalak', label: 'ਸਾਂਝ', Icon: JhalakIcon },
+        { href: '/jhalak', label: 'ਸਾਂਝ', Icon: JhalakIcon, badge: unread },
         { href: '/leaderboard', label: 'ਸਰਵੋਤਮ', Icon: LeaderboardIcon },
       ]
 
@@ -72,11 +103,16 @@ export default function TopBar({ profile }) {
 
       {/* Bottom navigation bar */}
       <nav className="bottom-nav">
-        {navLinks.map(({ href, label, Icon }) => {
+        {navLinks.map(({ href, label, Icon, badge }) => {
           const active = pathname === href
           return (
             <Link key={href} href={href} className={`bottom-nav-item ${active ? 'active' : ''}`}>
-              <Icon active={active} />
+              <span className="nav-icon-wrap">
+                <Icon active={active} />
+                {badge > 0 && (
+                  <span className="nav-badge">{badge > 99 ? '99+' : badge}</span>
+                )}
+              </span>
               <span className="bottom-nav-label">{label}</span>
             </Link>
           )

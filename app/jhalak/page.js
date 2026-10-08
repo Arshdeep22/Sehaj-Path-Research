@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
+import { getCache, setCache, useIsomorphicLayoutEffect } from '../../lib/clientCache'
 import TopBar from '../../components/TopBar'
 
 function timeAgo(dateStr) {
@@ -208,11 +209,52 @@ function FeedCard({ item, currentUserId, onLike, isActive }) {
 
 function LoadingScreen() {
   return (
-    <div className="feed-reel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none"
-        stroke="rgba(26,95,143,0.5)" strokeWidth="2.5" strokeLinecap="round">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-      </svg>
+    <div className="feed-reel" style={{ overflow: 'hidden' }}>
+      <div className="feed-slide">
+        <div className="feed-card is-active" style={{ cursor: 'default' }}>
+          <div className="feed-card-sheen" />
+
+          {/* Header */}
+          <div className="feed-card-header">
+            <div className="flex items-center gap-3">
+              <div className="sk-box" style={{ width: 40, height: 40, borderRadius: '9999px' }} />
+              <div>
+                <div className="sk-box" style={{ width: 120, height: 13, marginBottom: 7 }} />
+                <div className="sk-box" style={{ width: 64, height: 10 }} />
+              </div>
+            </div>
+            <div className="sk-box" style={{ width: 34, height: 34, borderRadius: 12 }} />
+          </div>
+
+          {/* Breadcrumb */}
+          <div className="px-5 py-2.5 flex gap-2">
+            <div className="sk-box" style={{ width: 80, height: 20, borderRadius: 9999 }} />
+            <div className="sk-box" style={{ width: 96, height: 20, borderRadius: 9999 }} />
+          </div>
+
+          <div className="divider-royal mx-5" />
+
+          {/* Shabad lines */}
+          <div className="feed-shabad-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="sk-box" style={{ width: '100%', height: 16 }} />
+            <div className="sk-box" style={{ width: '85%', height: 16 }} />
+            <div className="sk-box" style={{ width: '92%', height: 16 }} />
+            <div className="sk-box" style={{ width: '60%', height: 16 }} />
+          </div>
+
+          {/* Comment */}
+          <div className="feed-comment" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="sk-box" style={{ width: '100%', height: 11 }} />
+            <div className="sk-box" style={{ width: '70%', height: 11 }} />
+          </div>
+
+          {/* Footer */}
+          <div className="feed-card-footer" style={{ gap: 10 }}>
+            <div className="sk-box" style={{ width: 72, height: 38, borderRadius: 12 }} />
+            <div className="sk-box" style={{ width: 72, height: 38, borderRadius: 12 }} />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -233,6 +275,13 @@ export default function JhalakPage() {
   const startIndexRef = useRef(0)
   const didInitScrollRef = useRef(false)
 
+  // Seed profile from cache so the top bar (score/avatar) paints instantly.
+  // Feed data itself is always loaded fresh — stale read/unread order would mislead.
+  useIsomorphicLayoutEffect(() => {
+    const p = getCache('profile')
+    if (p) setProfile(p)
+  }, [])
+
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -241,6 +290,7 @@ export default function JhalakPage() {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       if (!prof || prof.must_change_password) { router.push('/change-password'); return }
       setProfile(prof)
+      setCache('profile', prof)
       setCurrentUserId(user.id)
 
       const { data: { session } } = await supabase.auth.getSession()
@@ -311,6 +361,9 @@ export default function JhalakPage() {
     const item = feedItems[activeIndex]
     if (!item || viewedRef.current.has(item.id)) return
     viewedRef.current.add(item.id)
+
+    // Tell the nav badge to decrement locally (no extra API call)
+    window.dispatchEvent(new CustomEvent('shabad:viewed'))
 
     // optimistic: add me to this card's viewers
     setViews(prev => {
