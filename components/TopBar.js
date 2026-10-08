@@ -5,11 +5,13 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 import { clearCache } from '../lib/clientCache'
+import { registerServiceWorker, enablePush, notificationPermission, pushSupported } from '../lib/push'
 
 export default function TopBar({ profile }) {
   const router = useRouter()
   const pathname = usePathname()
   const [unread, setUnread] = useState(0)
+  const [pushState, setPushState] = useState('unknown')   // unknown | default | granted | denied | unsupported
   const pendingRef = useRef(0)   // views applied locally before the next count fetch
 
   async function handleLogout() {
@@ -19,6 +21,31 @@ export default function TopBar({ profile }) {
   }
 
   const isAdmin = profile?.role === 'admin'
+
+  // Register the service worker, keep the subscription fresh, and auto-prompt once
+  useEffect(() => {
+    if (!profile?.id) return
+    if (!pushSupported()) { setPushState('unsupported'); return }
+    registerServiceWorker()
+    const perm = notificationPermission()
+    setPushState(perm)
+
+    if (perm === 'granted') {
+      enablePush()   // already allowed — just refresh the subscription on the server
+    } else if (perm === 'default' && !localStorage.getItem('push:auto-asked')) {
+      // First authenticated visit: prompt automatically (works on Android/desktop;
+      // iOS still needs a tap on the bell). Only ever auto-ask once per browser.
+      localStorage.setItem('push:auto-asked', '1')
+      enablePush().then(res => {
+        setPushState(res.ok ? 'granted' : (res.reason === 'denied' ? 'denied' : notificationPermission()))
+      })
+    }
+  }, [profile?.id])
+
+  async function handleEnablePush() {
+    const res = await enablePush()
+    setPushState(res.ok ? 'granted' : (res.reason === 'denied' ? 'denied' : notificationPermission()))
+  }
 
   // Unread shabads = total shabads the user hasn't viewed yet (feed badge)
   useEffect(() => {
@@ -83,6 +110,17 @@ export default function TopBar({ profile }) {
               <span className="text-sm">✦</span>
               <span className="text-sm font-bold">{profile?.score || 0}</span>
             </div>
+          )}
+
+          {profile && (pushState === 'default' || pushState === 'denied') && (
+            <button
+              onClick={handleEnablePush}
+              title={pushState === 'denied' ? 'ਸੂਚਨਾਵਾਂ ਬੰਦ ਹਨ — ਬ੍ਰਾਊਜ਼ਰ ਸੈਟਿੰਗ ਵਿੱਚ ਚਾਲੂ ਕਰੋ' : 'ਸੂਚਨਾਵਾਂ ਚਾਲੂ ਕਰੋ'}
+              className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+              style={{ background: 'rgba(14,65,110,0.07)', border: '1px solid rgba(14,65,110,0.12)' }}
+            >
+              <BellIcon muted={pushState === 'denied'} />
+            </button>
           )}
 
           {profile && (
@@ -171,6 +209,17 @@ function JhalakIcon({ active }) {
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       <line x1="9" y1="10" x2="15" y2="10" />
       <line x1="9" y1="14" x2="13" y2="14" />
+    </svg>
+  )
+}
+
+function BellIcon({ muted }) {
+  const c = muted ? 'rgba(239,68,68,0.75)' : '#1a5f8f'
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      {muted && <line x1="3" y1="3" x2="21" y2="21" />}
     </svg>
   )
 }

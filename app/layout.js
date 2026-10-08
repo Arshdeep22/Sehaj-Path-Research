@@ -3,6 +3,16 @@ import './globals.css'
 export const metadata = {
   title: 'ਸਹਿਜ ਪਾਠ ਖੋਜ',
   description: 'ਗੁਰੂ ਗ੍ਰੰਥ ਸਾਹਿਬ ਦੀ ਸਾਂਝੀ ਖੋਜ',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'ਸਹਿਜ ਪਾਠ',
+    statusBarStyle: 'default',
+  },
+  icons: {
+    icon: '/icon-192.png',
+    apple: '/icon-192.png',
+  },
 }
 
 export const viewport = {
@@ -10,6 +20,7 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  themeColor: '#0c2540',
 }
 
 // SVG lotus/flower for background decoration

@@ -196,6 +196,23 @@ CREATE POLICY "Users can add their own views"
   ON public.shabad_views FOR INSERT
   WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = user_id);
 
+-- Web Push subscriptions (one row per device/browser per user)
+CREATE TABLE IF NOT EXISTS public.push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users manage their own push subscriptions"
+  ON public.push_subscriptions FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
 -- =====================================================
 -- Grant permissions
 -- =====================================================
@@ -206,3 +223,4 @@ GRANT ALL ON public.angles TO authenticated;
 GRANT ALL ON public.shabads TO authenticated;
 GRANT ALL ON public.shabad_likes TO authenticated;
 GRANT ALL ON public.shabad_views TO authenticated;
+GRANT ALL ON public.push_subscriptions TO authenticated;

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../../lib/supabaseClient'
+import { notifyShabadAdded } from '../../../lib/push'
 import TopBar from '../../../components/TopBar'
 
 export default function TopicDetailPage() {
@@ -164,12 +165,12 @@ export default function TopicDetailPage() {
     if (!shabadText.trim()) return
     if (shabadComment.trim().length < 50) return
     setSaving(true)
-    const { error } = await supabase.from('shabads').insert({
+    const { data: inserted, error } = await supabase.from('shabads').insert({
       angle_id: showAddShabad,
       shabad_text: shabadText.trim(),
       comment: shabadComment.trim() || null,
       created_by: profile.id,
-    })
+    }).select('id').single()
     if (!error) {
       await supabase.from('profiles').update({ score: (profile.score || 0) + 5 }).eq('id', profile.id)
       setProfile(p => ({ ...p, score: (p.score || 0) + 5 }))
@@ -178,6 +179,7 @@ export default function TopicDetailPage() {
       setShabadComment('')
       setShowAddShabad(null)
       await loadData()
+      if (inserted?.id) notifyShabadAdded(inserted.id)   // push to everyone except the author
     }
     setSaving(false)
   }
