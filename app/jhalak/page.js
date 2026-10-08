@@ -18,16 +18,8 @@ function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString('pa-IN')
 }
 
-function FeedCard({ item, currentUserId, onLike, isActive }) {
+function FeedCard({ item, isActive }) {
   const router = useRouter()
-  const [showLikers, setShowLikers] = useState(false)
-  const [showViewers, setShowViewers] = useState(false)
-  const [likePop, setLikePop] = useState(0)
-  const longPressTimer = useRef(null)
-
-  const likers = item.likers || []
-  const viewers = item.viewers || []
-  const isLiked = likers.some(l => l.user_id === currentUserId)
 
   function handleCardClick() {
     const topicId = item.angle?.topic?.id
@@ -35,19 +27,6 @@ function FeedCard({ item, currentUserId, onLike, isActive }) {
     if (topicId) {
       router.push(`/topics/${topicId}?openAngle=${angleId}#shabad-${item.id}`)
     }
-  }
-
-  function handleLike(e) {
-    e.stopPropagation()
-    setLikePop(n => n + 1)   // retriggers the pop animation on every click
-    onLike(item.id)          // fire-and-forget — UI already updates optimistically
-  }
-
-  function startLongPress(setter, count) {
-    if (count > 0) longPressTimer.current = setTimeout(() => setter(true), 500)
-  }
-  function endLongPress() {
-    clearTimeout(longPressTimer.current)
   }
 
   return (
@@ -114,95 +93,6 @@ function FeedCard({ item, currentUserId, onLike, isActive }) {
           </p>
         </div>
       )}
-
-      {/* Footer: like + view */}
-      <div className="feed-card-footer" style={{ gap: '10px' }}>
-        {/* Like */}
-        <div className="relative">
-          <button
-            key={likePop}
-            className={`feed-like-btn${isLiked ? ' liked' : ''}`}
-            onClick={handleLike}
-            onMouseEnter={() => likers.length > 0 && setShowLikers(true)}
-            onMouseLeave={() => setShowLikers(false)}
-            onTouchStart={() => startLongPress(setShowLikers, likers.length)}
-            onTouchEnd={endLongPress}
-            style={likePop > 0 ? { animation: 'likePopIn 0.32s ease-out' } : {}}
-          >
-            <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🙏🏻</span>
-            <span className="font-semibold text-sm ml-1.5">{likers.length}</span>
-          </button>
-
-          {showLikers && likers.length > 0 && (
-            <div
-              className="feed-likers-tooltip"
-              onMouseEnter={() => setShowLikers(true)}
-              onMouseLeave={() => setShowLikers(false)}
-            >
-              <p className="text-xs font-semibold mb-2" style={{ color: 'rgba(12,36,64,0.45)', letterSpacing: '0.04em' }}>
-                ਝੁਕਿਆ ਮੱਥਾ
-              </p>
-              {likers.map(l => (
-                <div key={l.user_id} className="flex items-center gap-2 mb-1.5 last:mb-0">
-                  <div
-                    className="w-5 h-5 rounded-full flex items-center justify-center font-bold flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #1a5f8f, #0c2540)', color: 'white', fontSize: '9px' }}
-                  >
-                    {(l.full_name || l.username || '?')[0].toUpperCase()}
-                  </div>
-                  <span className="text-xs" style={{ color: '#0c2540' }}>
-                    {l.full_name || l.username}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Views */}
-        <div className="relative">
-          <button
-            className="feed-view-btn"
-            onClick={e => { e.stopPropagation(); if (viewers.length > 0) setShowViewers(v => !v) }}
-            onMouseEnter={() => viewers.length > 0 && setShowViewers(true)}
-            onMouseLeave={() => setShowViewers(false)}
-            onTouchStart={() => startLongPress(setShowViewers, viewers.length)}
-            onTouchEnd={endLongPress}
-            title="ਕਿੰਨਿਆਂ ਨੇ ਵੇਖਿਆ"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            <span className="font-semibold text-sm ml-1.5">{viewers.length}</span>
-          </button>
-
-          {showViewers && viewers.length > 0 && (
-            <div
-              className="feed-likers-tooltip"
-              onMouseEnter={() => setShowViewers(true)}
-              onMouseLeave={() => setShowViewers(false)}
-            >
-              <p className="text-xs font-semibold mb-2" style={{ color: 'rgba(12,36,64,0.45)', letterSpacing: '0.04em' }}>
-                ਵੇਖਣ ਵਾਲੇ
-              </p>
-              {viewers.map(v => (
-                <div key={v.user_id} className="flex items-center gap-2 mb-1.5 last:mb-0">
-                  <div
-                    className="w-5 h-5 rounded-full flex items-center justify-center font-bold flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #1a5f8f, #0c2540)', color: 'white', fontSize: '9px' }}
-                  >
-                    {(v.full_name || v.username || '?')[0].toUpperCase()}
-                  </div>
-                  <span className="text-xs" style={{ color: '#0c2540' }}>
-                    {v.full_name || v.username}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   )
 }
@@ -249,8 +139,7 @@ function LoadingScreen() {
           </div>
 
           {/* Footer */}
-          <div className="feed-card-footer" style={{ gap: 10 }}>
-            <div className="sk-box" style={{ width: 72, height: 38, borderRadius: 12 }} />
+          <div className="feed-card-footer">
             <div className="sk-box" style={{ width: 72, height: 38, borderRadius: 12 }} />
           </div>
         </div>
@@ -263,14 +152,12 @@ export default function JhalakPage() {
   const router = useRouter()
   const [profile, setProfile] = useState(null)
   const [shabads, setShabads] = useState([])
-  const [likes, setLikes] = useState({})
   const [views, setViews] = useState({})
   const [currentUserId, setCurrentUserId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeIndex, setActiveIndex] = useState(0)
   const tokenRef = useRef(null)
   const reelRef = useRef(null)
-  const likeQueueRef = useRef({})     // shabadId -> { desired, running }
   const viewedRef = useRef(new Set()) // shabadIds already marked viewed this session
   const startIndexRef = useRef(0)
   const didInitScrollRef = useRef(false)
@@ -301,7 +188,6 @@ export default function JhalakPage() {
       })
       const data = await res.json()
       setShabads(data.shabads || [])
-      setLikes(data.likes || {})
       setViews(data.views || {})
       startIndexRef.current = data.startIndex || 0
       setActiveIndex(data.startIndex || 0)
@@ -315,7 +201,7 @@ export default function JhalakPage() {
     init()
   }, [router])
 
-  const feedItems = shabads.map(s => ({ ...s, likers: likes[s.id] || [], viewers: views[s.id] || [] }))
+  const feedItems = shabads.map(s => ({ ...s, viewers: views[s.id] || [] }))
 
   // Active-card detection + initial positioning, driven by scroll position.
   // Using the nearest slide to the scroll offset guarantees exactly one active
@@ -381,77 +267,6 @@ export default function JhalakPage() {
     }).catch(() => {})
   }, [activeIndex, loading])
 
-  // Instant optimistic toggle; the backend is reconciled in the background.
-  function handleLike(shabadId) {
-    const currentlyLiked = (likes[shabadId] || []).some(l => l.user_id === currentUserId)
-    const nextLiked = !currentlyLiked
-
-    // 1. Update the UI immediately — no waiting on the network
-    setLikes(prev => {
-      const current = prev[shabadId] || []
-      const without = current.filter(l => l.user_id !== currentUserId)
-      if (nextLiked) {
-        return {
-          ...prev,
-          [shabadId]: [...without, { user_id: currentUserId, full_name: profile?.full_name, username: profile?.username }],
-        }
-      }
-      return { ...prev, [shabadId]: without }
-    })
-
-    // 2. Hand the desired state to the per-shabad background queue
-    enqueueLikeSync(shabadId, nextLiked)
-  }
-
-  // Per-shabad FIFO queue: processes one request at a time, always syncing to the
-  // latest desired state. Rapid clicks collapse to the final intent.
-  async function enqueueLikeSync(shabadId, desired) {
-    const q = likeQueueRef.current
-    const entry = q[shabadId] || (q[shabadId] = { desired, running: false })
-    entry.desired = desired
-
-    if (entry.running) return
-    entry.running = true
-
-    try {
-      while (true) {
-        const want = entry.desired
-        let ok = false
-        try {
-          const res = await fetch(`/api/feed/${shabadId}/like`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenRef.current}` },
-            body: JSON.stringify({ liked: want }),
-          })
-          ok = res.ok
-        } catch {
-          ok = false
-        }
-
-        // Someone clicked again while we were waiting → process the new intent next
-        if (entry.desired !== want) continue
-
-        // Settled. On failure, revert the UI to the real (unchanged) state.
-        if (!ok) {
-          setLikes(prev => {
-            const current = prev[shabadId] || []
-            const without = current.filter(l => l.user_id !== currentUserId)
-            if (!want) {
-              return {
-                ...prev,
-                [shabadId]: [...without, { user_id: currentUserId, full_name: profile?.full_name, username: profile?.username }],
-              }
-            }
-            return { ...prev, [shabadId]: without }
-          })
-        }
-        break
-      }
-    } finally {
-      q[shabadId].running = false
-    }
-  }
-
   if (loading) {
     return (
       <>
@@ -485,8 +300,6 @@ export default function JhalakPage() {
           <div className="feed-slide" data-slide={i} key={item.id}>
             <FeedCard
               item={item}
-              currentUserId={currentUserId}
-              onLike={handleLike}
               isActive={i === activeIndex}
             />
           </div>

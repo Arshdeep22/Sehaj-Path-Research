@@ -38,31 +38,15 @@ export async function GET(request) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
   if (!baseShabads?.length) {
-    return Response.json({ shabads: [], likes: {}, views: {}, startIndex: 0, currentUserId: user.id })
+    return Response.json({ shabads: [], views: {}, startIndex: 0, currentUserId: user.id })
   }
 
   const shabadIds = baseShabads.map(s => s.id)
 
-  const [{ data: likes }, { data: views }] = await Promise.all([
-    admin
-      .from('shabad_likes')
-      .select('shabad_id, user_id, liker:profiles!shabad_likes_user_id_fkey(id, full_name, username)')
-      .in('shabad_id', shabadIds),
-    admin
-      .from('shabad_views')
-      .select('shabad_id, user_id, viewer:profiles!shabad_views_user_id_fkey(id, full_name, username)')
-      .in('shabad_id', shabadIds),
-  ])
-
-  const likesMap = {}
-  const likeSeen = new Set()
-  for (const like of (likes || [])) {
-    const key = `${like.shabad_id}:${like.user_id}`
-    if (likeSeen.has(key)) continue
-    likeSeen.add(key)
-    if (!likesMap[like.shabad_id]) likesMap[like.shabad_id] = []
-    likesMap[like.shabad_id].push({ user_id: like.user_id, ...like.liker })
-  }
+  const { data: views } = await admin
+    .from('shabad_views')
+    .select('shabad_id, user_id, viewer:profiles!shabad_views_user_id_fkey(id, full_name, username)')
+    .in('shabad_id', shabadIds)
 
   const viewsMap = {}
   const viewSeen = new Set()
@@ -96,7 +80,6 @@ export async function GET(request) {
 
   return Response.json({
     shabads: ordered,
-    likes: likesMap,
     views: viewsMap,
     startIndex,
     currentUserId: user.id,

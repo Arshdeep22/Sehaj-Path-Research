@@ -659,7 +659,20 @@ function AngleSection({ angle, angleIndex, shabads, authorMap, expanded, profile
               </button>
             </>
           )}
-          <span className="text-lg" style={{ color: 'rgba(12,36,64,0.35)' }}>{expanded ? '▲' : '▼'}</span>
+          <span
+            className="flex items-center justify-center rounded-full transition-all duration-300"
+            style={{
+              width: 28,
+              height: 28,
+              background: expanded ? 'rgba(14,65,110,0.1)' : 'rgba(14,65,110,0.05)',
+              color: '#1a5f8f',
+              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </span>
         </div>
       </div>
 

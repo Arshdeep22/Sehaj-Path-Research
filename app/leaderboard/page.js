@@ -52,7 +52,11 @@ export default function LeaderboardPage() {
 
   if (loading) return <LoadingScreen />
 
-  const myRank = leaders.findIndex(u => u.id === profile.id) + 1
+  // Tie-aware rank: users with equal score share the same rank (1,1,3,…).
+  // Medals/podium only make sense once someone has a positive score.
+  const rankOf = (user) => leaders.filter(u => (u.score || 0) > (user.score || 0)).length + 1
+  const hasPositiveScores = (leaders[0]?.score || 0) > 0
+  const myRank = rankOf(profile)
 
   return (
     <div className="page-body">
@@ -66,8 +70,8 @@ export default function LeaderboardPage() {
           <p style={{ color: 'rgba(12,36,64,0.45)' }}>ਸਭ ਤੋਂ ਵੱਧ ਯੋਗਦਾਨ ਪਾਉਣ ਵਾਲੇ</p>
         </div>
 
-        {/* Top 3 Podium */}
-        {leaders.length >= 3 && (
+        {/* Top 3 Podium — only when scores are actually positive */}
+        {hasPositiveScores && leaders.length >= 3 && (
           <div className="grid grid-cols-3 gap-4 mb-10 animate-fadeInUp" style={{ animationDelay: '0.1s' }}>
             <PodiumCard user={leaders[1]} rank={2} stats={userStats[leaders[1]?.id]} isMe={leaders[1]?.id === profile.id} />
             <PodiumCard user={leaders[0]} rank={1} stats={userStats[leaders[0]?.id]} isMe={leaders[0]?.id === profile.id} tall />
@@ -76,7 +80,7 @@ export default function LeaderboardPage() {
         )}
 
         {/* My rank highlight */}
-        {myRank > 3 && (
+        {hasPositiveScores && myRank > 3 && (
           <div className="mb-6 p-4 rounded-xl animate-fadeInUp"
             style={{ background: 'rgba(14,65,110,0.07)', border: '1px solid rgba(14,65,110,0.15)' }}>
             <p className="text-center text-sm" style={{ color: '#1a5f8f' }}>
@@ -88,7 +92,10 @@ export default function LeaderboardPage() {
 
         {/* Full list */}
         <div className="space-y-3">
-          {leaders.map((user, i) => (
+          {leaders.map((user, i) => {
+            const score = user.score || 0
+            const rank = rankOf(user)
+            return (
             <div
               key={user.id}
               className={`lb-row animate-fadeInUp`}
@@ -98,15 +105,23 @@ export default function LeaderboardPage() {
               }}
             >
               <div className="w-8 text-center">
-                {i === 0 && <span className="text-xl">🥇</span>}
-                {i === 1 && <span className="text-xl">🥈</span>}
-                {i === 2 && <span className="text-xl">🥉</span>}
-                {i >= 3 && <span className="text-sm font-bold" style={{ color: 'rgba(12,36,64,0.4)' }}>#{i + 1}</span>}
+                {score > 0 && rank === 1 && <span className="text-xl">🥇</span>}
+                {score > 0 && rank === 2 && <span className="text-xl">🥈</span>}
+                {score > 0 && rank === 3 && <span className="text-xl">🥉</span>}
+                {score > 0 && rank > 3 && <span className="text-sm font-bold" style={{ color: 'rgba(12,36,64,0.4)' }}>#{rank}</span>}
+                {score === 0 && <span className="text-sm" style={{ color: 'rgba(12,36,64,0.25)' }}>–</span>}
               </div>
 
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-base flex-shrink-0"
-                style={{ background: `linear-gradient(135deg, ${rankGradient(i)})`, color: 'white' }}>
-                {(user.full_name || user.username || '?')[0].toUpperCase()}
+              <div className="relative flex-shrink-0">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-base"
+                  style={{ background: `linear-gradient(135deg, ${rankGradient(i)})`, color: 'white' }}>
+                  {(user.full_name || user.username || '?')[0].toUpperCase()}
+                </div>
+                {(userStats[user.id]?.unread || 0) > 0 && (
+                  <span className="lb-unread-badge" title={`${userStats[user.id].unread} ਨਾ-ਪੜ੍ਹੇ ਸ਼ਬਦ`}>
+                    {userStats[user.id].unread > 99 ? '99+' : userStats[user.id].unread}
+                  </span>
+                )}
               </div>
 
               <div className="flex-1">
@@ -125,7 +140,8 @@ export default function LeaderboardPage() {
                 <p className="text-xs" style={{ color: 'rgba(12,36,64,0.35)' }}>ਅੰਕ</p>
               </div>
             </div>
-          ))}
+            )
+          })}
 
           {leaders.length === 0 && (
             <div className="text-center py-16">
@@ -151,9 +167,16 @@ function PodiumCard({ user, rank, stats, isMe, tall }) {
         ...(isMe ? { border: '1px solid rgba(14,65,110,0.3)' } : {}),
       }}>
       <div className="text-3xl mb-2">{rankEmojis[rank]}</div>
-      <div className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg mx-auto mb-2"
-        style={{ background: `linear-gradient(135deg, ${rankGradient(rank - 1)})`, color: 'white' }}>
-        {(user.full_name || user.username || '?')[0].toUpperCase()}
+      <div className="relative inline-block mb-2">
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg mx-auto"
+          style={{ background: `linear-gradient(135deg, ${rankGradient(rank - 1)})`, color: 'white' }}>
+          {(user.full_name || user.username || '?')[0].toUpperCase()}
+        </div>
+        {(stats?.unread || 0) > 0 && (
+          <span className="lb-unread-badge" title={`${stats.unread} ਨਾ-ਪੜ੍ਹੇ ਸ਼ਬਦ`}>
+            {stats.unread > 99 ? '99+' : stats.unread}
+          </span>
+        )}
       </div>
       <p className="font-semibold text-sm truncate" style={{ color: '#0c2540' }}>{user.full_name || user.username}</p>
       <p className="font-black text-2xl mt-1" style={{ color: rankColors[rank] }}>{user.score || 0}</p>

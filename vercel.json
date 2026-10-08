@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/reset-scores",
+      "schedule": "29 18 * * 6"
+    }
+  ]
+}

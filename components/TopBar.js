@@ -5,13 +5,15 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 import { clearCache } from '../lib/clientCache'
-import { registerServiceWorker, enablePush, notificationPermission, pushSupported } from '../lib/push'
+import { registerServiceWorker, enablePush, disablePush, notificationPermission, pushSupported } from '../lib/push'
 
 export default function TopBar({ profile }) {
   const router = useRouter()
   const pathname = usePathname()
   const [unread, setUnread] = useState(0)
   const [pushState, setPushState] = useState('unknown')   // unknown | default | granted | denied | unsupported
+  const [pushOn, setPushOn] = useState(false)             // is there an active subscription
+  const [pushNote, setPushNote] = useState('')            // transient hint under the bell
   const pendingRef = useRef(0)   // views applied locally before the next count fetch
 
   async function handleLogout() {
@@ -22,7 +24,8 @@ export default function TopBar({ profile }) {
 
   const isAdmin = profile?.role === 'admin'
 
-  // Register the service worker, keep the subscription fresh, and auto-prompt once
+  // Register the service worker, reflect current state, and auto-prompt once.
+  // After that first automatic ask, the bell tap re-triggers the prompt on demand.
   useEffect(() => {
     if (!profile?.id) return
     if (!pushSupported()) { setPushState('unsupported'); return }
@@ -31,20 +34,39 @@ export default function TopBar({ profile }) {
     setPushState(perm)
 
     if (perm === 'granted') {
-      enablePush()   // already allowed — just refresh the subscription on the server
+      enablePush().then(res => setPushOn(res.ok))   // keep subscription fresh
     } else if (perm === 'default' && !localStorage.getItem('push:auto-asked')) {
-      // First authenticated visit: prompt automatically (works on Android/desktop;
-      // iOS still needs a tap on the bell). Only ever auto-ask once per browser.
+      // First authenticated visit → prompt automatically (once per browser)
       localStorage.setItem('push:auto-asked', '1')
       enablePush().then(res => {
         setPushState(res.ok ? 'granted' : (res.reason === 'denied' ? 'denied' : notificationPermission()))
+        setPushOn(res.ok)
       })
     }
   }, [profile?.id])
 
-  async function handleEnablePush() {
+  // Toggle notifications on/off (bell is always available so users can change their mind)
+  async function handleTogglePush() {
+    setPushNote('')
+    if (pushOn) {
+      await disablePush()
+      setPushOn(false)
+      return
+    }
+    if (notificationPermission() === 'denied') {
+      // Browser blocks programmatic re-enable — must be changed in site settings
+      setPushNote('ਸੂਚਨਾਵਾਂ ਬ੍ਰਾਊਜ਼ਰ ਸੈਟਿੰਗ ਵਿੱਚ ਬੰਦ ਹਨ। ਸਾਈਟ ਸੈਟਿੰਗ ਤੋਂ ਚਾਲੂ ਕਰੋ।')
+      setPushState('denied')
+      setTimeout(() => setPushNote(''), 5000)
+      return
+    }
     const res = await enablePush()
     setPushState(res.ok ? 'granted' : (res.reason === 'denied' ? 'denied' : notificationPermission()))
+    setPushOn(res.ok)
+    if (!res.ok && res.reason === 'denied') {
+      setPushNote('ਸੂਚਨਾਵਾਂ ਬ੍ਰਾਊਜ਼ਰ ਸੈਟਿੰਗ ਵਿੱਚ ਬੰਦ ਹਨ। ਸਾਈਟ ਸੈਟਿੰਗ ਤੋਂ ਚਾਲੂ ਕਰੋ।')
+      setTimeout(() => setPushNote(''), 5000)
+    }
   }
 
   // Unread shabads = total shabads the user hasn't viewed yet (feed badge)
@@ -82,6 +104,7 @@ export default function TopBar({ profile }) {
       ]
     : [
         { href: '/topics', label: 'ਵਿਸ਼ੇ', Icon: TopicsIcon },
+        { href: '/prashan', label: 'ਪ੍ਰਸ਼ਨ', Icon: QuestionIcon },
         { href: '/jhalak', label: 'ਸਾਂਝ', Icon: JhalakIcon, badge: unread },
         { href: '/leaderboard', label: 'ਸਰਵੋਤਮ', Icon: LeaderboardIcon },
       ]
@@ -112,15 +135,29 @@ export default function TopBar({ profile }) {
             </div>
           )}
 
-          {profile && (pushState === 'default' || pushState === 'denied') && (
-            <button
-              onClick={handleEnablePush}
-              title={pushState === 'denied' ? 'ਸੂਚਨਾਵਾਂ ਬੰਦ ਹਨ — ਬ੍ਰਾਊਜ਼ਰ ਸੈਟਿੰਗ ਵਿੱਚ ਚਾਲੂ ਕਰੋ' : 'ਸੂਚਨਾਵਾਂ ਚਾਲੂ ਕਰੋ'}
-              className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
-              style={{ background: 'rgba(14,65,110,0.07)', border: '1px solid rgba(14,65,110,0.12)' }}
-            >
-              <BellIcon muted={pushState === 'denied'} />
-            </button>
+          {profile && pushState !== 'unsupported' && (
+            <div className="relative">
+              <button
+                onClick={handleTogglePush}
+                title={pushOn ? 'ਸੂਚਨਾਵਾਂ ਬੰਦ ਕਰੋ' : 'ਸੂਚਨਾਵਾਂ ਚਾਲੂ ਕਰੋ'}
+                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                style={pushOn
+                  ? { background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)' }
+                  : { background: 'rgba(14,65,110,0.07)', border: '1px solid rgba(14,65,110,0.12)' }}
+              >
+                <BellIcon muted={!pushOn} on={pushOn} />
+              </button>
+              {pushNote && (
+                <div className="absolute right-0 mt-2 px-3 py-2 rounded-xl text-xs z-50"
+                  style={{
+                    top: '100%', width: 200, color: '#0c2540',
+                    background: 'rgba(255,255,255,0.98)', border: '1px solid rgba(14,65,110,0.15)',
+                    boxShadow: '0 8px 24px rgba(14,65,110,0.14)',
+                  }}>
+                  {pushNote}
+                </div>
+              )}
+            </div>
           )}
 
           {profile && (
@@ -213,10 +250,21 @@ function JhalakIcon({ active }) {
   )
 }
 
-function BellIcon({ muted }) {
-  const c = muted ? 'rgba(239,68,68,0.75)' : '#1a5f8f'
+function QuestionIcon({ active }) {
+  const c = active ? '#1a5f8f' : 'rgba(12,36,64,0.4)'
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  )
+}
+
+function BellIcon({ muted, on }) {
+  const c = on ? '#d97706' : 'rgba(12,36,64,0.5)'
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill={on ? 'rgba(245,158,11,0.25)' : 'none'} stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
       {muted && <line x1="3" y1="3" x2="21" y2="21" />}
