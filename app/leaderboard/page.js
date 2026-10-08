@@ -55,7 +55,8 @@ export default function LeaderboardPage() {
   // Tie-aware rank: users with equal score share the same rank (1,1,3,…).
   // Medals/podium only make sense once someone has a positive score.
   const rankOf = (user) => leaders.filter(u => (u.score || 0) > (user.score || 0)).length + 1
-  const hasPositiveScores = (leaders[0]?.score || 0) > 0
+  const scorers = leaders.filter(u => (u.score || 0) > 0)   // only users with positive scores belong on the podium
+  const hasPositiveScores = scorers.length > 0
   const myRank = rankOf(profile)
 
   return (
@@ -70,12 +71,23 @@ export default function LeaderboardPage() {
           <p style={{ color: 'rgba(12,36,64,0.45)' }}>ਸਭ ਤੋਂ ਵੱਧ ਯੋਗਦਾਨ ਪਾਉਣ ਵਾਲੇ</p>
         </div>
 
-        {/* Top 3 Podium — only when scores are actually positive */}
-        {hasPositiveScores && leaders.length >= 3 && (
-          <div className="grid grid-cols-3 gap-4 mb-10 animate-fadeInUp" style={{ animationDelay: '0.1s' }}>
-            <PodiumCard user={leaders[1]} rank={2} stats={userStats[leaders[1]?.id]} isMe={leaders[1]?.id === profile.id} />
-            <PodiumCard user={leaders[0]} rank={1} stats={userStats[leaders[0]?.id]} isMe={leaders[0]?.id === profile.id} tall />
-            <PodiumCard user={leaders[2]} rank={3} stats={userStats[leaders[2]?.id]} isMe={leaders[2]?.id === profile.id} />
+        {/* Top 3 Podium — only show cards for users who actually have points */}
+        {hasPositiveScores && (
+          <div
+            className={`grid gap-4 mb-10 animate-fadeInUp ${
+              scorers.length === 1 ? 'grid-cols-1 max-w-[200px] mx-auto'
+              : scorers.length === 2 ? 'grid-cols-2 max-w-md mx-auto'
+              : 'grid-cols-3'
+            }`}
+            style={{ animationDelay: '0.1s' }}
+          >
+            {scorers.length >= 2 && (
+              <PodiumCard user={scorers[1]} rank={2} stats={userStats[scorers[1]?.id]} isMe={scorers[1]?.id === profile.id} />
+            )}
+            <PodiumCard user={scorers[0]} rank={1} stats={userStats[scorers[0]?.id]} isMe={scorers[0]?.id === profile.id} tall />
+            {scorers.length >= 3 && (
+              <PodiumCard user={scorers[2]} rank={3} stats={userStats[scorers[2]?.id]} isMe={scorers[2]?.id === profile.id} />
+            )}
           </div>
         )}
 
