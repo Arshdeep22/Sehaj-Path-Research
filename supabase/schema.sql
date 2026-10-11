@@ -203,8 +203,13 @@ CREATE TABLE IF NOT EXISTS public.weekly_leaderboard (
   username TEXT NOT NULL,
   score INTEGER NOT NULL,
   rank INTEGER NOT NULL,
+  unread_shabads INTEGER NOT NULL DEFAULT 0,   -- shabads this user had NOT yet viewed at snapshot time
   snapshot_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Backfill the column on databases created before unread_shabads existed
+ALTER TABLE public.weekly_leaderboard
+  ADD COLUMN IF NOT EXISTS unread_shabads INTEGER NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_weekly_leaderboard_rank ON public.weekly_leaderboard (rank);
 

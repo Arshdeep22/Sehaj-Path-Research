@@ -231,6 +231,10 @@ export default function WeeklyLeaderboardPage() {
                   <span className="font-black text-xl" style={{ color: '#b45309' }}>{e.score}</span>
                   <p className="text-xs" style={{ color: 'rgba(12,36,64,0.35)' }}>ਅੰਕ</p>
                 </div>
+                <div className="text-right pl-2 ml-2" style={{ borderLeft: '1px solid rgba(14,65,110,0.1)' }}>
+                  <span className="font-bold text-lg" style={{ color: '#1a5f8f' }}>{e.unread_shabads ?? 0}</span>
+                  <p className="text-xs" style={{ color: 'rgba(12,36,64,0.35)' }}>ਅਣਪੜ੍ਹੇ ਸ਼ਬਦ</p>
+                </div>
               </div>
             ))}
           </div>
