@@ -165,6 +165,17 @@ export default function TopicDetailPage() {
     return session?.access_token
   }
 
+  // Normalize pasted gurbani: remove blank lines and strip whitespace inside each line.
+  // Pasting from other tabs often adds a blank line between every verse plus spaces
+  // between every word, which wastes vertical space and looks inconsistent.
+  function normalizeShabadText(text) {
+    return (text || '')
+      .split(/\r?\n/)
+      .map(line => line.replace(/\s+/g, ''))   // drop every space/tab inside the line
+      .filter(line => line.length > 0)          // drop blank/whitespace-only lines
+      .join('\n')
+  }
+
   function showScoreAnimation(points, e) {
     const x = e?.clientX || window.innerWidth / 2
     const y = e?.clientY || window.innerHeight / 2
@@ -193,12 +204,13 @@ export default function TopicDetailPage() {
 
   async function addShabad(e) {
     e.preventDefault()
-    if (!shabadText.trim()) return
+    const cleanShabad = normalizeShabadText(shabadText)
+    if (!cleanShabad) return
     if (shabadComment.trim().length < 50) return
     setSaving(true)
     const { data: inserted, error } = await supabase.from('shabads').insert({
       angle_id: showAddShabad,
-      shabad_text: shabadText.trim(),
+      shabad_text: cleanShabad,
       comment: shabadComment.trim() || null,
       created_by: profile.id,
     }).select('id').single()
@@ -288,11 +300,12 @@ export default function TopicDetailPage() {
 
   async function handleEditShabad(e) {
     e.preventDefault()
-    if (!editShabadText.trim() || !showEditShabad) return
+    const cleanShabad = normalizeShabadText(editShabadText)
+    if (!cleanShabad || !showEditShabad) return
     setSavingEditShabad(true)
     const { error } = await supabase
       .from('shabads')
-      .update({ shabad_text: editShabadText.trim(), comment: editShabadComment.trim() || null })
+      .update({ shabad_text: cleanShabad, comment: editShabadComment.trim() || null })
       .eq('id', showEditShabad.id)
       .eq('created_by', profile.id)
     if (!error) {

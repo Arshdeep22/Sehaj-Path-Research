@@ -149,6 +149,15 @@ export default function PrashanPage() {
     setTimeout(() => setScoreFloat(null), 1300)
   }
 
+  // Normalize pasted gurbani: remove blank lines and strip whitespace inside each line.
+  function normalizeShabadText(text) {
+    return (text || '')
+      .split(/\r?\n/)
+      .map(line => line.replace(/\s+/g, ''))
+      .filter(line => line.length > 0)
+      .join('\n')
+  }
+
   // Create a brand-new topic from inside the question dialog (for questions that
   // don't fit any existing topic). Any authenticated user may create one.
   async function handleCreateTopicInline() {
@@ -229,11 +238,12 @@ export default function PrashanPage() {
 
   async function handleAddAnswer(e) {
     e.preventDefault()
-    if (!ansText.trim() || ansComment.trim().length < 50) return
+    const cleanShabad = normalizeShabadText(ansText)
+    if (!cleanShabad || ansComment.trim().length < 50) return
     setSavingAns(true)
     const { error } = await supabase.from('shabads').insert({
       angle_id: showAnswer,
-      shabad_text: ansText.trim(),
+      shabad_text: cleanShabad,
       comment: ansComment.trim(),
       created_by: profile.id,
     })
@@ -249,10 +259,11 @@ export default function PrashanPage() {
 
   async function handleEditAnswer(e) {
     e.preventDefault()
-    if (!editAnsText.trim() || !editAns) return
+    const cleanShabad = normalizeShabadText(editAnsText)
+    if (!cleanShabad || !editAns) return
     setSavingEditAns(true)
     const { error } = await supabase.from('shabads')
-      .update({ shabad_text: editAnsText.trim(), comment: editAnsComment.trim() || null })
+      .update({ shabad_text: cleanShabad, comment: editAnsComment.trim() || null })
       .eq('id', editAns.id).eq('created_by', profile.id)
     if (!error) { await loadData(); setEditAns(null) }
     setSavingEditAns(false)
