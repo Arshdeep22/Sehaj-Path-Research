@@ -73,7 +73,7 @@ export default function RootLayout({ children }) {
           rel="stylesheet"
         />
       </head>
-      <body style={{ background: 'linear-gradient(160deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%)', minHeight: '100vh' }}>
+      <body suppressHydrationWarning style={{ background: 'linear-gradient(160deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%)', minHeight: '100vh' }}>
 
         {/* Background orbs */}
         <div className="orb orb-1" />
