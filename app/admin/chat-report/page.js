@@ -44,6 +44,13 @@ const CATEGORIES = [
     weeklyTarget: 5,
     keywords: ['ਸੇਵਾ', 'ਹੱਥੀ', 'sewa'],
   },
+  {
+    key: 'sehajpath',
+    label: 'ਸਹਿਜ ਪਾਠ',
+    emoji: '📖',
+    weeklyTarget: 150,
+    keywords: ['ਸਹਿਜ ਪਾਠ', 'ਸਹਿਜਪਾਠ', 'ਸਹਿਜ', 'sehaj path', 'sehajpath', 'sehaj'],
+  },
 ]
 
 // ── Parsing helpers ───────────────────────────────────────────────────────────
@@ -568,6 +575,7 @@ const CAT_THEME = {
   birharhe:    { bg: '#be185d', light: '#fdf2f8', border: '#ec4899' },
   japji:       { bg: '#7c3aed', light: '#f5f3ff', border: '#8b5cf6' },
   sewa:        { bg: '#15803d', light: '#f0fdf4', border: '#22c55e' },
+  sehajpath:   { bg: '#0e7490', light: '#ecfeff', border: '#06b6d4' },
 }
 
 // ── Tab 1: Report Card ────────────────────────────────────────────────────────
@@ -1028,6 +1036,7 @@ async function downloadLeaderboardImage(rankings, weekRange) {
     birharhe:    { bg: '#cc3d7a', light: '#fdf2f8', bdr: 'rgba(204,61,122,0.3)' },
     japji:       { bg: '#9255e5', light: '#f5f3ff', bdr: 'rgba(146,85,229,0.3)' },
     sewa:        { bg: '#28a055', light: '#f0fdf4', bdr: 'rgba(40,160,85,0.3)' },
+    sehajpath:   { bg: '#0e8aa0', light: '#ecfeff', bdr: 'rgba(14,138,160,0.3)' },
   }
 
   function rr(x, y, w, h, r) {
@@ -1040,12 +1049,10 @@ async function downloadLeaderboardImage(rankings, weekRange) {
   }
 
   rankings.forEach(({ cat, ranked }, ci) => {
-    const row = ci < 3 ? 0 : 1
-    const col = ci < 3 ? ci : ci - 3
+    const row = Math.floor(ci / 3)
+    const col = ci % 3
     const ph = row === 0 ? ph1 : ph2
-    const pw = row === 0
-      ? (W - PAD * 2 - GAP * 2) / 3
-      : (W - PAD * 2 - GAP) / 2
+    const pw = (W - PAD * 2 - GAP * 2) / 3
     const px = PAD + col * (pw + GAP)
     const py = HDR_H + row * (ph1 + GAP)
     const th = THEME[cat.key]

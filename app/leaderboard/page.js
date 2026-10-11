@@ -82,11 +82,11 @@ export default function LeaderboardPage() {
             style={{ animationDelay: '0.1s' }}
           >
             {scorers.length >= 2 && (
-              <PodiumCard user={scorers[1]} rank={2} stats={userStats[scorers[1]?.id]} isMe={scorers[1]?.id === profile.id} />
+              <PodiumCard user={scorers[1]} rank={rankOf(scorers[1])} stats={userStats[scorers[1]?.id]} isMe={scorers[1]?.id === profile.id} />
             )}
-            <PodiumCard user={scorers[0]} rank={1} stats={userStats[scorers[0]?.id]} isMe={scorers[0]?.id === profile.id} tall />
+            <PodiumCard user={scorers[0]} rank={rankOf(scorers[0])} stats={userStats[scorers[0]?.id]} isMe={scorers[0]?.id === profile.id} tall />
             {scorers.length >= 3 && (
-              <PodiumCard user={scorers[2]} rank={3} stats={userStats[scorers[2]?.id]} isMe={scorers[2]?.id === profile.id} />
+              <PodiumCard user={scorers[2]} rank={rankOf(scorers[2])} stats={userStats[scorers[2]?.id]} isMe={scorers[2]?.id === profile.id} />
             )}
           </div>
         )}
