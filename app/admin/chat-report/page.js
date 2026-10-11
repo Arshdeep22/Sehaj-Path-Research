@@ -1117,12 +1117,13 @@ async function downloadLeaderboardImage(rankings, weekRange) {
         ctx.textAlign = 'center'; ctx.fillText(String(rank), px + 26, ty)
       }
 
-      // Name (clipped to available width)
+      // Name (clipped to available width) — top-3 names anonymized to "ਕਿਰਪਾ"
       const nmW = pw - 150
+      const displayName = rank <= 3 ? 'ਕਿਰਪਾ' : truncateName(user.name)
       ctx.save()
       ctx.beginPath(); ctx.rect(px + 48, ry + 1, nmW, ROW_H - 2); ctx.clip()
       ctx.fillStyle = '#111827'; ctx.font = gf(19)
-      ctx.textAlign = 'left'; ctx.fillText(truncateName(user.name), px + 50, ty)
+      ctx.textAlign = 'left'; ctx.fillText(displayName, px + 50, ty)
       ctx.restore()
 
       // Value
