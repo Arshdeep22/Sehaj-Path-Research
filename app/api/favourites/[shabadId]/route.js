@@ -1,4 +1,4 @@
-import { getAdminClient } from '../../../../../lib/supabaseAdmin'
+import { getAdminClient } from '../../../../lib/supabaseAdmin'
 import { createClient } from '@supabase/supabase-js'
 
 async function getCallerUser(request) {
