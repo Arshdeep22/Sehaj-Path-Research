@@ -14,7 +14,11 @@ export default function TopBar({ profile }) {
   const [pushState, setPushState] = useState('unknown')   // unknown | default | granted | denied | unsupported
   const [pushOn, setPushOn] = useState(false)             // is there an active subscription
   const [pushNote, setPushNote] = useState('')            // transient hint under the bell
+  const [panelOpen, setPanelOpen] = useState(false)       // avatar side panel (profile / bell / favourites / logout)
   const pendingRef = useRef(0)   // views applied locally before the next count fetch
+
+  // Close the side panel whenever the route changes
+  useEffect(() => { setPanelOpen(false) }, [pathname])
 
   async function handleLogout() {
     clearCache()
@@ -135,51 +139,92 @@ export default function TopBar({ profile }) {
             </div>
           )}
 
-          {profile && pushState !== 'unsupported' && (
-            <div className="relative">
-              <button
-                onClick={handleTogglePush}
-                title={pushOn ? 'ਸੂਚਨਾਵਾਂ ਬੰਦ ਕਰੋ' : 'ਸੂਚਨਾਵਾਂ ਚਾਲੂ ਕਰੋ'}
-                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
-                style={pushOn
-                  ? { background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)' }
-                  : { background: 'rgba(14,65,110,0.07)', border: '1px solid rgba(14,65,110,0.12)' }}
-              >
-                <BellIcon muted={!pushOn} on={pushOn} />
-              </button>
-              {pushNote && (
-                <div className="absolute right-0 mt-2 px-3 py-2 rounded-xl text-xs z-50"
-                  style={{
-                    top: '100%', width: 200, color: '#0c2540',
-                    background: 'rgba(255,255,255,0.98)', border: '1px solid rgba(14,65,110,0.15)',
-                    boxShadow: '0 8px 24px rgba(14,65,110,0.14)',
-                  }}>
-                  {pushNote}
-                </div>
-              )}
-            </div>
-          )}
-
           {profile && (
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #1a5f8f, #0c2540)', color: 'white' }}>
+            <button
+              onClick={() => setPanelOpen(true)}
+              title="ਮੇਨੂ"
+              aria-label="Menu"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-transform"
+              style={{ background: 'linear-gradient(135deg, #1a5f8f, #0c2540)', color: 'white' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+            >
               {(profile.full_name || profile.username || 'U')[0].toUpperCase()}
-            </div>
+            </button>
           )}
-
-          <button
-            onClick={handleLogout}
-            title="ਬਾਹਰ"
-            aria-label="Logout"
-            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
-            style={{ color: 'rgba(12,36,64,0.6)', background: 'rgba(14,65,110,0.07)', border: '1px solid rgba(14,65,110,0.12)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.25)'; e.currentTarget.style.color = '#ef4444' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(14,65,110,0.07)'; e.currentTarget.style.borderColor = 'rgba(14,65,110,0.12)'; e.currentTarget.style.color = 'rgba(12,36,64,0.6)' }}
-          >
-            <LogoutIcon />
-          </button>
         </div>
       </div>
+
+      {/* Avatar side panel */}
+      {profile && panelOpen && (
+        <div className="side-panel-overlay" onClick={e => e.target === e.currentTarget && setPanelOpen(false)}>
+          <div className="side-panel" role="dialog" aria-label="ਮੇਨੂ">
+            {/* Identity header */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #1a5f8f, #0c2540)', color: 'white' }}>
+                {(profile.full_name || profile.username || 'U')[0].toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold truncate" style={{ color: '#0c2540' }}>
+                  {profile.full_name || profile.username || 'ਵਰਤੋਂਕਾਰ'}
+                </p>
+                {profile.username && (
+                  <p className="text-xs truncate" style={{ color: 'rgba(12,36,64,0.45)' }}>@{profile.username}</p>
+                )}
+              </div>
+              <button
+                onClick={() => setPanelOpen(false)}
+                aria-label="ਬੰਦ ਕਰੋ"
+                className="ml-auto w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ color: 'rgba(12,36,64,0.5)', background: 'rgba(14,65,110,0.07)' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="divider-royal mb-2" />
+
+            {/* Notifications toggle */}
+            {pushState !== 'unsupported' && (
+              <>
+                <button onClick={handleTogglePush} className="side-panel-row">
+                  <BellIcon muted={!pushOn} on={pushOn} />
+                  <span>ਸੂਚਨਾਵਾਂ</span>
+                  <span className="ml-auto relative inline-block" style={{ width: 44, height: 24 }}>
+                    <span className="absolute inset-0 transition-colors duration-200"
+                      style={{ borderRadius: 12, background: pushOn ? 'rgba(245,158,11,0.9)' : 'rgba(14,65,110,0.18)' }} />
+                    <span className="absolute top-0.5 transition-all duration-200"
+                      style={{ left: pushOn ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                  </span>
+                </button>
+                {pushNote && (
+                  <p className="text-xs px-3 pb-2" style={{ color: 'rgba(12,36,64,0.55)' }}>{pushNote}</p>
+                )}
+              </>
+            )}
+
+            {/* Favourites (users only — admins have no feed) */}
+            {!isAdmin && (
+              <Link href="/favourites" className="side-panel-row" onClick={() => setPanelOpen(false)}>
+                <StarIcon />
+                <span>ਮਨਪਸੰਦ</span>
+                <svg className="ml-auto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(12,36,64,0.3)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </Link>
+            )}
+
+            {/* Logout */}
+            <button onClick={handleLogout} className="side-panel-row is-danger">
+              <LogoutIcon />
+              <span>ਬਾਹਰ</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Bottom navigation bar */}
       <nav className="bottom-nav">
@@ -272,6 +317,14 @@ function LogoutIcon() {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <polyline points="16 17 21 12 16 7" />
       <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
+}
+
+function StarIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="#f59e0b" stroke="#d97706" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
     </svg>
   )
 }

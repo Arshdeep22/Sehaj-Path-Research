@@ -223,6 +223,34 @@ CREATE POLICY "Only admins can view weekly leaderboard"
 -- which bypasses RLS. Regular users and admins cannot mutate the snapshot from the UI.)
 
 -- =====================================================
+-- Shabad favourites (per-user saved shabads for the ਮਨਪਸੰਦ list)
+-- Mirrors shabad_views: one row per (shabad, user). No score is awarded.
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.shabad_favourites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  shabad_id UUID NOT NULL REFERENCES public.shabads(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(shabad_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_shabad_favourites_user ON public.shabad_favourites (user_id, created_at DESC);
+
+ALTER TABLE public.shabad_favourites ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own favourites"
+  ON public.shabad_favourites FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can add their own favourites"
+  ON public.shabad_favourites FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can remove their own favourites"
+  ON public.shabad_favourites FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- =====================================================
 -- Grant permissions
 -- =====================================================
 GRANT USAGE ON SCHEMA public TO authenticated;
@@ -233,3 +261,4 @@ GRANT ALL ON public.shabads TO authenticated;
 GRANT ALL ON public.shabad_views TO authenticated;
 GRANT ALL ON public.push_subscriptions TO authenticated;
 GRANT SELECT ON public.weekly_leaderboard TO authenticated;
+GRANT ALL ON public.shabad_favourites TO authenticated;
