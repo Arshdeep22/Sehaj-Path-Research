@@ -1094,11 +1094,13 @@ async function downloadLeaderboardImage(rankings, weekRange) {
     ranked.forEach((user, i) => {
       const val = user.catResults[cat.key].value
       const rank = ranked.slice(0, i).filter(u => u.catResults[cat.key].value > val).length + 1
+      // Medal (and name anonymization) only for top-3 who actually passed the target
+      const medaled = rank <= 3 && user.catResults[cat.key].passed
       const MEDALS_MAP = { 1: '🥇', 2: '🥈', 3: '🥉' }
       const medalBg = { 1: '#fffbeb', 2: '#f8fafc', 3: '#fff8f1' }
       const ry = ty0 + i * ROW_H
-      ctx.fillStyle = rank <= 3 ? (medalBg[rank] || '#ffffff') : (i % 2 === 0 ? '#ffffff' : th.light)
-      ctx.globalAlpha = rank <= 3 ? 1 : (i % 2 === 0 ? 1 : 0.55)
+      ctx.fillStyle = medaled ? (medalBg[rank] || '#ffffff') : (i % 2 === 0 ? '#ffffff' : th.light)
+      ctx.globalAlpha = medaled ? 1 : (i % 2 === 0 ? 1 : 0.55)
       ctx.fillRect(px, ry, pw, ROW_H)
       ctx.globalAlpha = 1
 
@@ -1108,7 +1110,7 @@ async function downloadLeaderboardImage(rankings, weekRange) {
       const ty = ry + ROW_H * 0.67
 
       // Rank / medal
-      if (MEDALS_MAP[rank]) {
+      if (medaled) {
         ctx.font = `24px "Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",serif`
         ctx.textAlign = 'center'
         ctx.fillText(MEDALS_MAP[rank], px + 26, ty + 4)
@@ -1117,9 +1119,9 @@ async function downloadLeaderboardImage(rankings, weekRange) {
         ctx.textAlign = 'center'; ctx.fillText(String(rank), px + 26, ty)
       }
 
-      // Name (clipped to available width) — top-3 names anonymized to "ਕਿਰਪਾ"
+      // Name (clipped to available width) — medaled top-3 names anonymized to "ਕਿਰਪਾ"
       const nmW = pw - 150
-      const displayName = rank <= 3 ? 'ਕਿਰਪਾ' : truncateName(user.name)
+      const displayName = medaled ? 'ਕਿਰਪਾ' : truncateName(user.name)
       ctx.save()
       ctx.beginPath(); ctx.rect(px + 48, ry + 1, nmW, ROW_H - 2); ctx.clip()
       ctx.fillStyle = '#111827'; ctx.font = gf(19)
