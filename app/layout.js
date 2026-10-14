@@ -1,4 +1,5 @@
 import './globals.css'
+import SwipeNav from '../components/SwipeNav'
 
 export const metadata = {
   title: 'ਸਹਿਜ ਪਾਠ ਖੋਜ',
@@ -92,6 +93,7 @@ export default function RootLayout({ children }) {
         </div>
 
         <div className="relative z-10 min-h-screen">
+          <SwipeNav />
           {children}
         </div>
       </body>

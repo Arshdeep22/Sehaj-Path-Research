@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, startTransition } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
@@ -15,10 +15,22 @@ export default function TopBar({ profile }) {
   const [pushOn, setPushOn] = useState(false)             // is there an active subscription
   const [pushNote, setPushNote] = useState('')            // transient hint under the bell
   const [panelOpen, setPanelOpen] = useState(false)       // avatar side panel (profile / bell / favourites / logout)
+  const [isEmbed, setIsEmbed] = useState(false)           // true when rendered inside a pre-warm iframe
   const pendingRef = useRef(0)   // views applied locally before the next count fetch
+  const navLinksRef = useRef([])
+
+  // Suppress the nav entirely when running inside the adjacent-tab iframe
+  useEffect(() => { setIsEmbed(window.self !== window.top) }, [])
 
   // Close the side panel whenever the route changes
   useEffect(() => { setPanelOpen(false) }, [pathname])
+
+  function navTo(href, direction) {
+    if (href === pathname) return
+    document.documentElement.dataset.nav = direction
+    if (!document.startViewTransition) { router.push(href); return }
+    document.startViewTransition(() => { startTransition(() => router.push(href)) })
+  }
 
   async function handleLogout() {
     clearCache()
@@ -112,6 +124,9 @@ export default function TopBar({ profile }) {
         { href: '/jhalak', label: 'ਸਾਂਝ', Icon: JhalakIcon, badge: unread },
         { href: '/leaderboard', label: 'ਸਰਵੋਤਮ', Icon: LeaderboardIcon },
       ]
+  navLinksRef.current = navLinks
+
+  if (isEmbed) return null
 
   return (
     <>
@@ -144,12 +159,30 @@ export default function TopBar({ profile }) {
               onClick={() => setPanelOpen(true)}
               title="ਮੇਨੂ"
               aria-label="Menu"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-transform"
-              style={{ background: 'linear-gradient(135deg, #1a5f8f, #0c2540)', color: 'white' }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+              className="flex items-center gap-1.5 flex-shrink-0 transition-all"
+              style={{
+                background: 'rgba(14,65,110,0.07)',
+                border: '1px solid rgba(14,65,110,0.15)',
+                borderRadius: 20,
+                padding: '3px 8px 3px 3px',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(14,65,110,0.13)'
+                e.currentTarget.style.borderColor = 'rgba(14,65,110,0.28)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(14,65,110,0.07)'
+                e.currentTarget.style.borderColor = 'rgba(14,65,110,0.15)'
+              }}
             >
-              {(profile.full_name || profile.username || 'U')[0].toUpperCase()}
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #1a5f8f, #0c2540)', color: 'white' }}>
+                {(profile.full_name || profile.username || 'U')[0].toUpperCase()}
+              </div>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(12,36,64,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
             </button>
           )}
         </div>
@@ -253,7 +286,19 @@ export default function TopBar({ profile }) {
         {navLinks.map(({ href, label, Icon, badge }) => {
           const active = pathname === href
           return (
-            <Link key={href} href={href} className={`bottom-nav-item ${active ? 'active' : ''}`}>
+            <Link
+              key={href}
+              href={href}
+              onClick={e => {
+                if (active) return
+                e.preventDefault()
+                const links = navLinksRef.current.map(l => l.href)
+                const cur = links.indexOf(pathname)
+                const dest = links.indexOf(href)
+                navTo(href, dest >= cur ? 'forward' : 'back')
+              }}
+              className={`bottom-nav-item ${active ? 'active' : ''}`}
+            >
               <span className="nav-icon-wrap">
                 <Icon active={active} />
                 {badge > 0 && (
@@ -261,6 +306,7 @@ export default function TopBar({ profile }) {
                 )}
               </span>
               <span className="bottom-nav-label">{label}</span>
+              {active && <span className="nav-active-indicator" />}
             </Link>
           )
         })}

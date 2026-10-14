@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
-import { getCache, setCache, useIsomorphicLayoutEffect } from '../../lib/clientCache'
+import { getCache, setCache, useIsomorphicLayoutEffect, getProfileCached } from '../../lib/clientCache'
 import TopBar from '../../components/TopBar'
 
 export default function TopicsPage() {
@@ -40,6 +40,13 @@ export default function TopicsPage() {
 
   useEffect(() => {
     async function load() {
+      // Fast path: if both caches are warm (shared localStorage from main window),
+      // skip getUser()+profiles.select() — useIsomorphicLayoutEffect already painted the UI.
+      if (getCache('profile') && getCache('topics')) {
+        const fast = await getProfileCached()
+        if (fast) { setProfile(fast.profile); setLoading(false); return }
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/'); return }
 

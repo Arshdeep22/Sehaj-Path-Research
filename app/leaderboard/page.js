@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
-import { getCache, setCache, useIsomorphicLayoutEffect } from '../../lib/clientCache'
+import { getCache, setCache, useIsomorphicLayoutEffect, getProfileCached } from '../../lib/clientCache'
 import TopBar from '../../components/TopBar'
 
 export default function LeaderboardPage() {
@@ -27,6 +27,12 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     async function load() {
+      // Fast path: skip getUser()+profiles.select() when both caches are warm.
+      if (getCache('profile') && getCache('leaderboard')) {
+        const fast = await getProfileCached()
+        if (fast) { setProfile(fast.profile); setLoading(false); return }
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/'); return }
 

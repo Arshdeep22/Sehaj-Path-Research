@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
-import { getCache, setCache, useIsomorphicLayoutEffect } from '../../lib/clientCache'
+import { getCache, setCache, useIsomorphicLayoutEffect, getProfileCached } from '../../lib/clientCache'
 import TopBar from '../../components/TopBar'
 import FeedCard from '../../components/FeedCard'
 
@@ -83,20 +83,30 @@ export default function JhalakPage() {
 
   useEffect(() => {
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/'); return }
-
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      if (!prof || prof.must_change_password) { router.push('/change-password'); return }
-      setProfile(prof)
-      setCache('profile', prof)
-      setCurrentUserId(user.id)
-
-      const { data: { session } } = await supabase.auth.getSession()
-      tokenRef.current = session?.access_token
+      // Fast path: skip getUser()+profiles.select() using the cached session.
+      // Feed data is still fetched fresh (stale ordering would mislead).
+      let userId, token
+      const fast = getCache('profile') ? await getProfileCached() : null
+      if (fast) {
+        setProfile(fast.profile)
+        userId = fast.profile.id
+        token = fast.token
+      } else {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { router.push('/'); return }
+        const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+        if (!prof || prof.must_change_password) { router.push('/change-password'); return }
+        setProfile(prof)
+        setCache('profile', prof)
+        userId = user.id
+        const { data: { session } } = await supabase.auth.getSession()
+        token = session?.access_token
+      }
+      setCurrentUserId(userId)
+      tokenRef.current = token
 
       const res = await fetch('/api/feed', {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
       setShabads(data.shabads || [])
@@ -107,7 +117,7 @@ export default function JhalakPage() {
       setActiveIndex(data.startIndex || 0)
       // Anything already viewed shouldn't be re-posted this session
       for (const s of (data.shabads || [])) {
-        if ((data.views?.[s.id] || []).some(v => v.user_id === user.id)) viewedRef.current.add(s.id)
+        if ((data.views?.[s.id] || []).some(v => v.user_id === userId)) viewedRef.current.add(s.id)
       }
 
       setLoading(false)
