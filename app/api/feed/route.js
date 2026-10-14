@@ -32,6 +32,7 @@ export async function GET(request) {
       author:profiles!shabads_created_by_fkey(id, full_name, username)
     `)
     .order('created_at', { ascending: false })
+    .limit(1000)
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
   if (!baseShabads?.length) {
@@ -44,6 +45,15 @@ export async function GET(request) {
     .from('shabad_views')
     .select('shabad_id, user_id, viewer:profiles!shabad_views_user_id_fkey(id, full_name, username)')
     .in('shabad_id', shabadIds)
+    .limit(10000)
+
+  // Separate query for ONLY the current user's views — one user never exceeds the
+  // PostgREST row cap, so this is always the complete and accurate set for ordering.
+  const { data: myViewRows } = await admin
+    .from('shabad_views')
+    .select('shabad_id')
+    .eq('user_id', user.id)
+    .in('shabad_id', shabadIds)
 
   // Which of these shabads the current user has favourited (for the ☆ star state)
   const { data: favRows } = await admin
@@ -55,33 +65,23 @@ export async function GET(request) {
 
   const viewsMap = {}
   const viewSeen = new Set()
-  const viewedByUser = new Set()
   for (const v of (views || [])) {
     const key = `${v.shabad_id}:${v.user_id}`
     if (viewSeen.has(key)) continue
     viewSeen.add(key)
     if (!viewsMap[v.shabad_id]) viewsMap[v.shabad_id] = []
     viewsMap[v.shabad_id].push({ user_id: v.user_id, ...v.viewer })
-    if (v.user_id === user.id) viewedByUser.add(v.shabad_id)
   }
 
-  // Split preserving newest→oldest order
-  const unviewed = baseShabads.filter(s => !viewedByUser.has(s.id))   // newest → oldest
-  const viewed = baseShabads.filter(s => viewedByUser.has(s.id))      // newest → oldest
+  // Use the dedicated per-user query for the unread/read split — always complete.
+  const viewedByUser = new Set((myViewRows || []).map(v => v.shabad_id))
 
-  let ordered
-  let startIndex
-  if (unviewed.length > 0) {
-    // Viewed above (oldest → newest, so newest viewed sits just above the boundary),
-    // then unviewed below (newest → oldest). Open at the first unviewed card.
-    const viewedAbove = [...viewed].reverse()
-    ordered = [...viewedAbove, ...unviewed]
-    startIndex = viewedAbove.length
-  } else {
-    // Everything seen → normal newest → oldest from the top
-    ordered = baseShabads
-    startIndex = 0
-  }
+  // All unread first (newest → oldest), then all read (newest → oldest).
+  // Guarantees new additions always surface at the top and scroll never dead-ends.
+  const unviewed = baseShabads.filter(s => !viewedByUser.has(s.id))
+  const viewed   = baseShabads.filter(s =>  viewedByUser.has(s.id))
+  const ordered  = [...unviewed, ...viewed]
+  const startIndex = 0
 
   return Response.json({
     shabads: ordered,

@@ -10,7 +10,7 @@ export default function AdminDashboard() {
   const [profile, setProfile] = useState(null)
   const [users, setUsers] = useState([])
   const [userStats, setUserStats] = useState({})
-  const [stats, setStats] = useState({ topics: 0, angles: 0, shabads: 0, users: 0 })
+  const [stats, setStats] = useState({ topics: 0, angles: 0, shabads: 0, users: 0, prasangs: 0 })
   const [loading, setLoading] = useState(true)
 
   const [showAddUser, setShowAddUser] = useState(false)
@@ -33,15 +33,17 @@ export default function AdminDashboard() {
         { count: topicsCount },
         { count: anglesCount },
         { count: shabadsCount },
+        { count: prasangsCount },
       ] = await Promise.all([
         supabase.from('profiles').select('*').eq('role', 'user').order('created_at', { ascending: false }),
         supabase.from('topics').select('*', { count: 'exact', head: true }),
         supabase.from('angles').select('*', { count: 'exact', head: true }),
         supabase.from('shabads').select('*', { count: 'exact', head: true }),
+        supabase.from('prasangs').select('*', { count: 'exact', head: true }),
       ])
 
       setUsers(usersData || [])
-      setStats({ topics: topicsCount || 0, angles: anglesCount || 0, shabads: shabadsCount || 0, users: usersData?.length || 0 })
+      setStats({ topics: topicsCount || 0, angles: anglesCount || 0, shabads: shabadsCount || 0, users: usersData?.length || 0, prasangs: prasangsCount || 0 })
 
       if (usersData?.length) {
         const uStats = {}
@@ -116,6 +118,7 @@ export default function AdminDashboard() {
     { label: 'ਵਿਸ਼ੇ', value: stats.topics, emoji: '📚', color: '#b45309' },
     { label: 'ਦ੍ਰਿਸ਼ਟੀਕੋਣ', value: stats.angles, emoji: '🔭', color: '#0c2540' },
     { label: 'ਸ਼ਬਦ', value: stats.shabads, emoji: '📖', color: '#0284c7' },
+    { label: 'ਪ੍ਰਸੰਗ', value: stats.prasangs, emoji: '📝', color: '#7c3aed' },
   ]
 
   return (
@@ -139,6 +142,9 @@ export default function AdminDashboard() {
             <button onClick={() => router.push('/admin/topics')} className="btn-gold text-sm px-4 py-2">
               ✦ ਵਿਸ਼ੇ ਪ੍ਰਬੰਧਨ
             </button>
+            <button onClick={() => router.push('/admin/prasang')} className="btn-royal text-sm px-4 py-2">
+              📖 ਪ੍ਰਸੰਗ ਪ੍ਰਬੰਧਨ
+            </button>
             <button onClick={() => setShowAddUser(true)} className="btn-royal text-sm px-4 py-2">
               + ਵਰਤੋਂਕਾਰ ਜੋੜੋ
             </button>
@@ -146,7 +152,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           {statItems.map((s, i) => (
             <div key={s.label} className="stat-card animate-fadeInUp" style={{ animationDelay: `${i * 0.07}s` }}>
               <div className="text-3xl mb-2">{s.emoji}</div>

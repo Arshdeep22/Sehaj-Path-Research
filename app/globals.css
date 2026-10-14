@@ -851,6 +851,8 @@ html, body {
   font-family: 'Noto Sans Gurmukhi', sans-serif;
   line-height: 1.9;
   letter-spacing: 0.02em;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* ---- Rank Medals ---- */

@@ -251,6 +251,92 @@ CREATE POLICY "Users can remove their own favourites"
   USING (auth.uid() = user_id);
 
 -- =====================================================
+-- Prasang (personal / admin-shared scripture study containers)
+-- Structure mirrors topics → angles → shabads but with per-user privacy:
+-- users only see their own prasang_angles and prasang_shabads.
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.prasangs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  description TEXT,
+  is_admin_created BOOLEAN NOT NULL DEFAULT false,
+  created_by UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.prasang_angles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  prasang_id UUID NOT NULL REFERENCES public.prasangs(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  created_by UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.prasang_shabads (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  prasang_angle_id UUID NOT NULL REFERENCES public.prasang_angles(id) ON DELETE CASCADE,
+  shabad_text TEXT NOT NULL,
+  comment TEXT NOT NULL,
+  created_by UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.prasangs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.prasang_angles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.prasang_shabads ENABLE ROW LEVEL SECURITY;
+
+-- Prasangs: anyone authenticated can read (to see admin-created ones); write = own or admin
+CREATE POLICY "All authenticated users can view prasangs"
+  ON public.prasangs FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY "Authenticated users can create prasangs"
+  ON public.prasangs FOR INSERT
+  WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = created_by);
+
+CREATE POLICY "Users can update their own prasangs, admins can update all"
+  ON public.prasangs FOR UPDATE
+  USING (auth.uid() = created_by OR public.is_admin());
+
+CREATE POLICY "Users can delete their own prasangs, admins can delete all"
+  ON public.prasangs FOR DELETE
+  USING (auth.uid() = created_by OR public.is_admin());
+
+-- Prasang angles: own rows + admins
+CREATE POLICY "Users can view their own prasang angles, admins see all"
+  ON public.prasang_angles FOR SELECT
+  USING (auth.uid() = created_by OR public.is_admin());
+
+CREATE POLICY "Authenticated users can create prasang angles"
+  ON public.prasang_angles FOR INSERT
+  WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = created_by);
+
+CREATE POLICY "Users can update their own prasang angles, admins can update all"
+  ON public.prasang_angles FOR UPDATE
+  USING (auth.uid() = created_by OR public.is_admin());
+
+CREATE POLICY "Users can delete their own prasang angles, admins can delete all"
+  ON public.prasang_angles FOR DELETE
+  USING (auth.uid() = created_by OR public.is_admin());
+
+-- Prasang shabads: own rows + admins
+CREATE POLICY "Users can view their own prasang shabads, admins see all"
+  ON public.prasang_shabads FOR SELECT
+  USING (auth.uid() = created_by OR public.is_admin());
+
+CREATE POLICY "Authenticated users can create prasang shabads"
+  ON public.prasang_shabads FOR INSERT
+  WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = created_by);
+
+CREATE POLICY "Users can update their own prasang shabads, admins can update all"
+  ON public.prasang_shabads FOR UPDATE
+  USING (auth.uid() = created_by OR public.is_admin());
+
+CREATE POLICY "Users can delete their own prasang shabads, admins can delete all"
+  ON public.prasang_shabads FOR DELETE
+  USING (auth.uid() = created_by OR public.is_admin());
+
+-- =====================================================
 -- Grant permissions
 -- =====================================================
 GRANT USAGE ON SCHEMA public TO authenticated;
@@ -262,3 +348,6 @@ GRANT ALL ON public.shabad_views TO authenticated;
 GRANT ALL ON public.push_subscriptions TO authenticated;
 GRANT SELECT ON public.weekly_leaderboard TO authenticated;
 GRANT ALL ON public.shabad_favourites TO authenticated;
+GRANT ALL ON public.prasangs TO authenticated;
+GRANT ALL ON public.prasang_angles TO authenticated;
+GRANT ALL ON public.prasang_shabads TO authenticated;

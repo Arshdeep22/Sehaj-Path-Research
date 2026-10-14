@@ -217,6 +217,17 @@ export default function TopBar({ profile }) {
               </Link>
             )}
 
+            {/* Prasang (users only) */}
+            {!isAdmin && (
+              <Link href="/prasang" className="side-panel-row" onClick={() => setPanelOpen(false)}>
+                <PrasangIcon />
+                <span>ਪ੍ਰਸੰਗ</span>
+                <svg className="ml-auto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(12,36,64,0.3)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </Link>
+            )}
+
             {/* Logout */}
             <button onClick={handleLogout} className="side-panel-row is-danger">
               <LogoutIcon />
@@ -325,6 +336,15 @@ function StarIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="#f59e0b" stroke="#d97706" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  )
+}
+
+function PrasangIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(12,36,64,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
     </svg>
   )
 }
