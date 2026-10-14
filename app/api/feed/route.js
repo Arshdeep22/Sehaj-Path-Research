@@ -63,6 +63,14 @@ export async function GET(request) {
     .in('shabad_id', shabadIds)
   const favouriteIds = (favRows || []).map(f => f.shabad_id)
 
+  // Which of these shabads the current user has marked as kanth (memorized)
+  const { data: kanthRows } = await admin
+    .from('shabad_kanth')
+    .select('shabad_id')
+    .eq('user_id', user.id)
+    .in('shabad_id', shabadIds)
+  const kanthIds = (kanthRows || []).map(k => k.shabad_id)
+
   const viewsMap = {}
   const viewSeen = new Set()
   for (const v of (views || [])) {
@@ -87,6 +95,7 @@ export async function GET(request) {
     shabads: ordered,
     views: viewsMap,
     favouriteIds,
+    kanthIds,
     startIndex,
     currentUserId: user.id,
   })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 function timeAgo(dateStr) {
   const secs = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -25,26 +25,34 @@ function StarIcon({ filled }) {
   )
 }
 
-// Shared feed/favourites card. Pass isFavourite + onToggleFavourite to show the ☆ toggle.
-export default function FeedCard({ item, isActive, isFavourite, onToggleFavourite }) {
-  const router = useRouter()
+function KanthIcon({ active }) {
+  const color = active ? '#8b5cf6' : 'currentColor'
+  const brainFill = active ? 'rgba(139,92,246,0.15)' : 'none'
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeLinecap="round" strokeLinejoin="round">
+      <path fill={brainFill} strokeWidth="2"
+        d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.99-3.01 3 3 0 0 1 .34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3z" />
+      <path fill={brainFill} strokeWidth="2"
+        d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.99-3.01 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3z" />
+      <circle cx="19" cy="5" r="4.5" fill={active ? 'rgba(139,92,246,0.12)' : 'white'} strokeWidth="1.5" />
+      <path d="M19 2.8v4.4M16.8 5h4.4" strokeWidth="1.8" />
+    </svg>
+  )
+}
 
-  function handleCardClick() {
-    const topicId = item.angle?.topic?.id
-    const angleId = item.angle?.id
-    if (topicId) {
-      router.push(`/topics/${topicId}?openAngle=${angleId}#shabad-${item.id}`)
-    }
-  }
+// Shared feed card. Props:
+//   isFavourite + onToggleFavourite  → show ☆ toggle
+//   isKanth + onToggleKanth          → show 🧠 toggle
+export default function FeedCard({ item, isActive, isFavourite, onToggleFavourite, isKanth, onToggleKanth }) {
+  const topicId = item.angle?.topic?.id
+  const angleId = item.angle?.id
+  const topicUrl = topicId ? `/topics/${topicId}?openAngle=${angleId}#shabad-${item.id}` : null
 
-  function handleStarClick(e) {
-    e.stopPropagation()
-    onToggleFavourite?.(item.id)
-  }
+  function stopProp(e) { e.stopPropagation() }
 
   return (
     <div className={`feed-card${isActive ? ' is-active' : ' is-inactive'}`}>
-      {/* Glass sheen overlay */}
       <div className="feed-card-sheen" />
 
       {/* Header row */}
@@ -62,15 +70,18 @@ export default function FeedCard({ item, isActive, isFavourite, onToggleFavourit
             </p>
           </div>
         </div>
-        <button
-          onClick={handleCardClick}
-          className="feed-nav-btn"
-          title="ਵਿਸ਼ੇ ਵੱਲ ਜਾਓ"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14M12 5l7 7-7 7" />
-          </svg>
-        </button>
+        {topicUrl && (
+          <Link
+            href={topicUrl}
+            onClick={stopProp}
+            className="feed-nav-btn"
+            title="ਵਿਸ਼ੇ ਵੱਲ ਜਾਓ"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </Link>
+        )}
       </div>
 
       {/* Topic → Angle breadcrumb */}
@@ -88,37 +99,50 @@ export default function FeedCard({ item, isActive, isFavourite, onToggleFavourit
         </div>
       </div>
 
-      {/* Divider */}
       <div className="divider-royal mx-5" />
 
       {/* Shabad text */}
-      <div className="feed-shabad-body" onClick={handleCardClick}>
+      <div className="feed-shabad-body">
         <p className="gurbani-text whitespace-pre-wrap" style={{ color: '#0c2540', fontSize: '1.05rem', lineHeight: 2 }}>
           {item.shabad_text}
         </p>
       </div>
 
-      {/* Translation / comment */}
+      {/* Comment */}
       {item.comment && (
-        <div className="feed-comment" onClick={handleCardClick}>
+        <div className="feed-comment">
           <p className="text-sm leading-relaxed italic" style={{ color: 'rgba(12,36,64,0.62)', lineHeight: 1.75 }}>
             "{item.comment}"
           </p>
         </div>
       )}
 
-      {/* Footer — favourite toggle */}
-      {onToggleFavourite && (
-        <div className="feed-card-footer">
-          <button
-            onClick={handleStarClick}
-            className={`feed-fav-btn${isFavourite ? ' is-fav' : ''}`}
-            title={isFavourite ? 'ਮਨਪਸੰਦ ਤੋਂ ਹਟਾਓ' : 'ਮਨਪਸੰਦ ਵਿੱਚ ਜੋੜੋ'}
-            aria-pressed={isFavourite}
-          >
-            <StarIcon filled={isFavourite} />
-            <span className="text-sm font-medium">ਮਨਪਸੰਦ</span>
-          </button>
+      {/* Footer — actions */}
+      {(onToggleFavourite || onToggleKanth) && (
+        <div className="feed-card-footer" style={{ gap: 8 }}>
+          {onToggleKanth && (
+            <button
+              onClick={e => { e.stopPropagation(); onToggleKanth(item.id) }}
+              className={`feed-fav-btn${isKanth ? ' is-fav' : ''}`}
+              style={isKanth ? { background: 'rgba(139,92,246,0.1)', borderColor: 'rgba(139,92,246,0.3)', color: '#8b5cf6' } : {}}
+              title={isKanth ? 'ਕੰਠ ਤੋਂ ਹਟਾਓ' : 'ਕੰਠ ਕਰੋ'}
+              aria-pressed={isKanth}
+            >
+              <KanthIcon active={isKanth} />
+              <span className="text-sm font-medium">ਕੰਠ</span>
+            </button>
+          )}
+          {onToggleFavourite && (
+            <button
+              onClick={e => { e.stopPropagation(); onToggleFavourite(item.id) }}
+              className={`feed-fav-btn${isFavourite ? ' is-fav' : ''}`}
+              title={isFavourite ? 'ਮਨਪਸੰਦ ਤੋਂ ਹਟਾਓ' : 'ਮਨਪਸੰਦ ਵਿੱਚ ਜੋੜੋ'}
+              aria-pressed={isFavourite}
+            >
+              <StarIcon filled={isFavourite} />
+              <span className="text-sm font-medium">ਮਨਪਸੰਦ</span>
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -228,6 +228,17 @@ export default function TopBar({ profile }) {
               </Link>
             )}
 
+            {/* Kanth (users only) */}
+            {!isAdmin && (
+              <Link href="/kanth" className="side-panel-row" onClick={() => setPanelOpen(false)}>
+                <KanthIcon />
+                <span>ਕੰਠ</span>
+                <svg className="ml-auto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(12,36,64,0.3)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </Link>
+            )}
+
             {/* Logout */}
             <button onClick={handleLogout} className="side-panel-row is-danger">
               <LogoutIcon />
@@ -345,6 +356,20 @@ function PrasangIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(12,36,64,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
       <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    </svg>
+  )
+}
+
+function KanthIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="rgba(139,92,246,0.7)" strokeLinecap="round" strokeLinejoin="round">
+      <path strokeWidth="2"
+        d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.99-3.01 3 3 0 0 1 .34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3z" />
+      <path strokeWidth="2"
+        d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.99-3.01 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3z" />
+      <circle cx="19" cy="5" r="4.5" fill="white" strokeWidth="1.5" />
+      <path d="M19 2.8v4.4M16.8 5h4.4" strokeWidth="1.8" />
     </svg>
   )
 }

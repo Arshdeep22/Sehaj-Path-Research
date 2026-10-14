@@ -64,6 +64,7 @@ export default function JhalakPage() {
   const [shabads, setShabads] = useState([])
   const [views, setViews] = useState({})
   const [favourites, setFavourites] = useState(() => new Set())
+  const [kanth, setKanth] = useState(() => new Set())
   const [currentUserId, setCurrentUserId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -101,6 +102,7 @@ export default function JhalakPage() {
       setShabads(data.shabads || [])
       setViews(data.views || {})
       setFavourites(new Set(data.favouriteIds || []))
+      setKanth(new Set(data.kanthIds || []))
       startIndexRef.current = data.startIndex || 0
       setActiveIndex(data.startIndex || 0)
       // Anything already viewed shouldn't be re-posted this session
@@ -133,6 +135,28 @@ export default function JhalakPage() {
         setFavourites(prev => {
           const next = new Set(prev)
           if (wasFav) next.add(shabadId); else next.delete(shabadId)
+          return next
+        })
+      })
+  }
+
+  // Toggle kanth (memorized) with optimistic UI.
+  function toggleKanth(shabadId) {
+    const wasKanth = kanth.has(shabadId)
+    setKanth(prev => {
+      const next = new Set(prev)
+      if (wasKanth) next.delete(shabadId); else next.add(shabadId)
+      return next
+    })
+    fetch(`/api/kanth/${shabadId}`, {
+      method: wasKanth ? 'DELETE' : 'POST',
+      headers: { Authorization: `Bearer ${tokenRef.current}` },
+    })
+      .then(res => { if (!res.ok) throw new Error() })
+      .catch(() => {
+        setKanth(prev => {
+          const next = new Set(prev)
+          if (wasKanth) next.add(shabadId); else next.delete(shabadId)
           return next
         })
       })
@@ -238,6 +262,8 @@ export default function JhalakPage() {
               isActive={i === activeIndex}
               isFavourite={favourites.has(item.id)}
               onToggleFavourite={toggleFavourite}
+              isKanth={kanth.has(item.id)}
+              onToggleKanth={toggleKanth}
             />
           </div>
         ))}

@@ -351,3 +351,17 @@ GRANT ALL ON public.shabad_favourites TO authenticated;
 GRANT ALL ON public.prasangs TO authenticated;
 GRANT ALL ON public.prasang_angles TO authenticated;
 GRANT ALL ON public.prasang_shabads TO authenticated;
+
+-- =====================================================
+-- Shabad Kanth (memorized shabads)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.shabad_kanth (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  shabad_id UUID NOT NULL REFERENCES public.shabads(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, shabad_id)
+);
+ALTER TABLE public.shabad_kanth ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage own kanth" ON public.shabad_kanth FOR ALL USING (auth.uid() = user_id);
+GRANT ALL ON public.shabad_kanth TO authenticated;
