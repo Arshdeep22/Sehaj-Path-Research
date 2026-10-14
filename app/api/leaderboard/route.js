@@ -32,7 +32,8 @@ export async function GET(request) {
 
   if (!users?.length) return Response.json({ users: [], stats: {} })
 
-  // Total shabads in the system — unread per user = total − that user's views
+  // Total shabads in the system — the feed now serves all of them, so
+  // unread per user = total shabads − that user's views.
   const { count: totalShabads } = await admin
     .from('shabads')
     .select('*', { count: 'exact', head: true })

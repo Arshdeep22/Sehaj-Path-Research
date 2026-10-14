@@ -14,8 +14,6 @@ async function getCallerUser(request) {
   return user || null
 }
 
-const MAX_FEED = 80
-
 export async function GET(request) {
   const user = await getCallerUser(request)
   if (!user) return Response.json({ error: 'ਅਧਿਕਾਰ ਨਹੀਂ' }, { status: 401 })
@@ -34,7 +32,6 @@ export async function GET(request) {
       author:profiles!shabads_created_by_fkey(id, full_name, username)
     `)
     .order('created_at', { ascending: false })
-    .limit(MAX_FEED)
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
   if (!baseShabads?.length) {
