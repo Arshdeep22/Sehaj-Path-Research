@@ -27,24 +27,35 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     async function load() {
-      // Fast path: skip getUser()+profiles.select() when both caches are warm.
-      if (getCache('profile') && getCache('leaderboard')) {
+      // Unread counts change every time any user views a shabad, so always re-fetch
+      // the full leaderboard — the useIsomorphicLayoutEffect above already painted the
+      // cached version instantly, so users see content immediately then get fresh data.
+      let token
+
+      if (getCache('profile')) {
         const fast = await getProfileCached()
-        if (fast) { setProfile(fast.profile); setLoading(false); return }
+        if (fast) {
+          setProfile(fast.profile)
+          token = fast.token
+        }
       }
 
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/'); return }
+      if (!token) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { router.push('/'); return }
 
-      const { data: prof } = await supabase
-        .from('profiles').select('*').eq('id', user.id).single()
-      if (!prof || prof.must_change_password) { router.push('/change-password'); return }
-      setProfile(prof)
-      setCache('profile', prof)
+        const { data: prof } = await supabase
+          .from('profiles').select('*').eq('id', user.id).single()
+        if (!prof || prof.must_change_password) { router.push('/change-password'); return }
+        setProfile(prof)
+        setCache('profile', prof)
 
-      const { data: { session } } = await supabase.auth.getSession()
+        const { data: { session } } = await supabase.auth.getSession()
+        token = session?.access_token
+      }
+
       const res = await fetch('/api/leaderboard', {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       const { users, stats } = await res.json()
       setLeaders(users || [])
