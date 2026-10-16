@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
 import { getCache, setCache, useIsomorphicLayoutEffect, getProfileCached } from '../../lib/clientCache'
+import { useAppStore } from '../../lib/store'
 import TopBar from '../../components/TopBar'
 import FeedCard from '../../components/FeedCard'
 
@@ -63,8 +64,6 @@ export default function JhalakPage() {
   const [profile, setProfile] = useState(null)
   const [shabads, setShabads] = useState([])
   const [views, setViews] = useState({})
-  const [favourites, setFavourites] = useState(() => new Set())
-  const [kanth, setKanth] = useState(() => new Set())
   const [currentUserId, setCurrentUserId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -73,6 +72,11 @@ export default function JhalakPage() {
   const viewedRef = useRef(new Set()) // shabadIds already marked viewed this session
   const startIndexRef = useRef(0)
   const didInitScrollRef = useRef(false)
+
+  // Store slices — subscribe narrowly so only relevant state changes trigger re-renders
+  const favouriteIds = useAppStore(s => s.favouriteIds)
+  const kanthIds     = useAppStore(s => s.kanthIds)
+  const { setFeedData, markViewed, toggleFavourite, revertFavourite, toggleKanth, revertKanth, setProfile: storeSetProfile } = useAppStore.getState()
 
   // Seed profile from cache so the top bar (score/avatar) paints instantly.
   // Feed data itself is always loaded fresh — stale read/unread order would mislead.
@@ -109,15 +113,20 @@ export default function JhalakPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
-      setShabads(data.shabads || [])
-      setViews(data.views || {})
-      setFavourites(new Set(data.favouriteIds || []))
-      setKanth(new Set(data.kanthIds || []))
+      const shabadList = data.shabads || []
+      const viewsMap   = data.views || {}
+
+      setShabads(shabadList)
+      setViews(viewsMap)
       startIndexRef.current = data.startIndex || 0
       setActiveIndex(data.startIndex || 0)
+
+      // Seed the store — computes unreadCount and propagates favourites/kanth/viewedIds
+      setFeedData({ shabads: shabadList, views: viewsMap, viewedIds: data.viewedIds, favouriteIds: data.favouriteIds, kanthIds: data.kanthIds, currentUserId: userId })
+
       // Anything already viewed shouldn't be re-posted this session
-      for (const s of (data.shabads || [])) {
-        if ((data.views?.[s.id] || []).some(v => v.user_id === userId)) viewedRef.current.add(s.id)
+      for (const s of shabadList) {
+        if ((viewsMap[s.id] || []).some(v => v.user_id === userId)) viewedRef.current.add(s.id)
       }
 
       setLoading(false)
@@ -127,49 +136,26 @@ export default function JhalakPage() {
 
   const feedItems = shabads.map(s => ({ ...s, viewers: views[s.id] || [] }))
 
-  // Toggle favourite with optimistic UI; revert if the request fails.
-  function toggleFavourite(shabadId) {
-    const wasFav = favourites.has(shabadId)
-    setFavourites(prev => {
-      const next = new Set(prev)
-      if (wasFav) next.delete(shabadId); else next.add(shabadId)
-      return next
-    })
+  // Toggle favourite with optimistic UI via store; revert if the request fails.
+  function handleToggleFavourite(shabadId) {
+    const nowFav = toggleFavourite(shabadId)
     fetch(`/api/favourites/${shabadId}`, {
-      method: wasFav ? 'DELETE' : 'POST',
+      method: nowFav ? 'POST' : 'DELETE',
       headers: { Authorization: `Bearer ${tokenRef.current}` },
     })
       .then(res => { if (!res.ok) throw new Error() })
-      .catch(() => {
-        // revert on failure
-        setFavourites(prev => {
-          const next = new Set(prev)
-          if (wasFav) next.add(shabadId); else next.delete(shabadId)
-          return next
-        })
-      })
+      .catch(() => revertFavourite(shabadId, !nowFav))
   }
 
-  // Toggle kanth (memorized) with optimistic UI.
-  function toggleKanth(shabadId) {
-    const wasKanth = kanth.has(shabadId)
-    setKanth(prev => {
-      const next = new Set(prev)
-      if (wasKanth) next.delete(shabadId); else next.add(shabadId)
-      return next
-    })
+  // Toggle kanth (memorized) with optimistic UI via store.
+  function handleToggleKanth(shabadId) {
+    const nowKanth = toggleKanth(shabadId)
     fetch(`/api/kanth/${shabadId}`, {
-      method: wasKanth ? 'DELETE' : 'POST',
+      method: nowKanth ? 'POST' : 'DELETE',
       headers: { Authorization: `Bearer ${tokenRef.current}` },
     })
       .then(res => { if (!res.ok) throw new Error() })
-      .catch(() => {
-        setKanth(prev => {
-          const next = new Set(prev)
-          if (wasKanth) next.add(shabadId); else next.delete(shabadId)
-          return next
-        })
-      })
+      .catch(() => revertKanth(shabadId, !nowKanth))
   }
 
   // Active-card detection + initial positioning, driven by scroll position.
@@ -210,17 +196,19 @@ export default function JhalakPage() {
     return () => { root.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
   }, [loading, feedItems.length])
 
-  // Mark the focused card as viewed (records who has seen it) — background, fire-and-forget
+  // Mark the focused card as viewed — background fire-and-forget.
+  // markViewed updates the store (unreadCount + leaderboard userStats) so all
+  // subscribed components (TopBar badge, leaderboard unread) update automatically.
   useEffect(() => {
     if (loading) return
     const item = feedItems[activeIndex]
     if (!item || viewedRef.current.has(item.id)) return
     viewedRef.current.add(item.id)
 
-    // Tell the nav badge to decrement locally (no extra API call)
-    window.dispatchEvent(new CustomEvent('shabad:viewed'))
+    // Update store: decrements unreadCount and propagates to leaderboard slice
+    markViewed(item.id)
 
-    // optimistic: add me to this card's viewers
+    // optimistic: add me to this card's viewers (local state only — not stored globally)
     setViews(prev => {
       const current = prev[item.id] || []
       if (current.some(v => v.user_id === currentUserId)) return prev
@@ -270,10 +258,10 @@ export default function JhalakPage() {
             <FeedCard
               item={item}
               isActive={i === activeIndex}
-              isFavourite={favourites.has(item.id)}
-              onToggleFavourite={toggleFavourite}
-              isKanth={kanth.has(item.id)}
-              onToggleKanth={toggleKanth}
+              isFavourite={favouriteIds.includes(item.id)}
+              onToggleFavourite={handleToggleFavourite}
+              isKanth={kanthIds.includes(item.id)}
+              onToggleKanth={handleToggleKanth}
             />
           </div>
         ))}

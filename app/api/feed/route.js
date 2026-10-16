@@ -94,6 +94,7 @@ export async function GET(request) {
   return Response.json({
     shabads: ordered,
     views: viewsMap,
+    viewedIds: [...viewedByUser],   // authoritative per-user list (from dedicated query, no row cap)
     favouriteIds,
     kanthIds,
     startIndex,

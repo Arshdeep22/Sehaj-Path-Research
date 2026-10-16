@@ -5,19 +5,25 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 import { clearCache } from '../lib/clientCache'
+import { useAppStore } from '../lib/store'
 import { registerServiceWorker, enablePush, disablePush, notificationPermission, pushSupported } from '../lib/push'
 
 export default function TopBar({ profile }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [unread, setUnread] = useState(0)
   const [pushState, setPushState] = useState('unknown')   // unknown | default | granted | denied | unsupported
   const [pushOn, setPushOn] = useState(false)             // is there an active subscription
   const [pushNote, setPushNote] = useState('')            // transient hint under the bell
   const [panelOpen, setPanelOpen] = useState(false)       // avatar side panel (profile / bell / favourites / logout)
   const [isEmbed, setIsEmbed] = useState(false)           // true when rendered inside a pre-warm iframe
-  const pendingRef = useRef(0)   // views applied locally before the next count fetch
+  const [coldUnread, setColdUnread] = useState(0)         // fallback before the feed is loaded into the store
   const navLinksRef = useRef([])
+
+  // Primary unread source: the reactive store (updated by markViewed in the feed).
+  // Falls back to a one-time Supabase count on cold start (before feed has been loaded).
+  const storeUnread   = useAppStore(s => s.unreadCount)
+  const feedLoaded    = useAppStore(s => s.feedLoaded)
+  const unread        = feedLoaded ? storeUnread : coldUnread
 
   // Suppress the nav entirely when running inside the adjacent-tab iframe
   useEffect(() => { setIsEmbed(window.self !== window.top) }, [])
@@ -34,6 +40,8 @@ export default function TopBar({ profile }) {
 
   async function handleLogout() {
     clearCache()
+    useAppStore.getState().clearAll()
+    useAppStore.persist.clearStorage()
     await supabase.auth.signOut()
     router.push('/')
   }
@@ -85,31 +93,22 @@ export default function TopBar({ profile }) {
     }
   }
 
-  // Unread shabads = total shabads the user hasn't viewed yet (feed badge)
+  // Cold-start fallback: query unread count once from Supabase when the store
+  // hasn't been seeded yet (i.e. the user hasn't visited the feed this session).
+  // Once feedLoaded is true, the store drives the badge and this effect never re-runs.
   useEffect(() => {
-    if (!profile?.id || isAdmin) return
+    if (!profile?.id || isAdmin || feedLoaded) return
     let cancelled = false
-    pendingRef.current = 0   // a fresh fetch reflects the latest server truth
     async function countUnread() {
       const [{ count: total }, { count: viewed }] = await Promise.all([
         supabase.from('shabads').select('id', { count: 'exact', head: true }),
         supabase.from('shabad_views').select('shabad_id', { count: 'exact', head: true }).eq('user_id', profile.id),
       ])
-      if (!cancelled) setUnread(Math.max(0, (total || 0) - (viewed || 0) - pendingRef.current))
+      if (!cancelled) setColdUnread(Math.max(0, (total || 0) - (viewed || 0)))
     }
     countUnread()
     return () => { cancelled = true }
-  }, [profile?.id, isAdmin, pathname])
-
-  // Decrement live as the feed marks cards viewed — no extra API call
-  useEffect(() => {
-    function onViewed() {
-      pendingRef.current += 1
-      setUnread(n => Math.max(0, n - 1))
-    }
-    window.addEventListener('shabad:viewed', onViewed)
-    return () => window.removeEventListener('shabad:viewed', onViewed)
-  }, [])
+  }, [profile?.id, isAdmin, feedLoaded])
 
   const navLinks = isAdmin
     ? [

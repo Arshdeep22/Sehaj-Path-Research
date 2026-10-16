@@ -5,16 +5,21 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
 import { getCache, setCache, useIsomorphicLayoutEffect } from '../../lib/clientCache'
+import { useAppStore } from '../../lib/store'
 import TopBar from '../../components/TopBar'
 
 export default function KanthPage() {
   const router = useRouter()
   const [profile, setProfile] = useState(null)
-  const [shabads, setShabads] = useState([])
-  const [kanth, setKanth] = useState(() => new Set())
   const [collapsed, setCollapsed] = useState({})
   const [loading, setLoading] = useState(true)
   const tokenRef = useRef(null)
+
+  // Store slices — kanthShabads is the full list; kanthIds tracks membership for the feed badge
+  const kanthShabads      = useAppStore(s => s.kanthShabads)
+  const kanthIds          = useAppStore(s => s.kanthIds)
+  const kanthShabadsLoaded = useAppStore(s => s.kanthShabadsLoaded)
+  const { setKanthShabads, removeKanthShabad } = useAppStore.getState()
 
   useIsomorphicLayoutEffect(() => {
     const p = getCache('profile')
@@ -34,25 +39,30 @@ export default function KanthPage() {
       const { data: { session } } = await supabase.auth.getSession()
       tokenRef.current = session?.access_token
 
+      // Skip fetch if the store already has a fresh list from this session
+      if (kanthShabadsLoaded) { setLoading(false); return }
+
       const res = await fetch('/api/kanth', {
         headers: { Authorization: `Bearer ${session?.access_token}` },
       })
       const data = await res.json()
-      const list = data.shabads || []
-      setShabads(list)
-      setKanth(new Set(list.map(s => s.id)))
+      setKanthShabads(data.shabads || [])
       setLoading(false)
     }
     init()
   }, [router])
 
   function removeKanth(shabadId) {
-    setKanth(prev => { const n = new Set(prev); n.delete(shabadId); return n })
+    removeKanthShabad(shabadId)
     fetch(`/api/kanth/${shabadId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${tokenRef.current}` },
     }).catch(() => {
-      setKanth(prev => { const n = new Set(prev); n.add(shabadId); return n })
+      // On failure, re-add the shabad. Re-fetch the list to restore correct state.
+      fetch('/api/kanth', { headers: { Authorization: `Bearer ${tokenRef.current}` } })
+        .then(r => r.json())
+        .then(d => setKanthShabads(d.shabads || []))
+        .catch(() => {})
     })
   }
 
@@ -60,7 +70,8 @@ export default function KanthPage() {
     setCollapsed(prev => ({ ...prev, [topicId]: !prev[topicId] }))
   }
 
-  const visible = shabads.filter(s => kanth.has(s.id))
+  // kanthIds is the source of truth for membership; kanthShabads holds full objects
+  const visible = kanthShabads.filter(s => kanthIds.includes(s.id))
 
   // Group by topic, preserving insertion order
   const groups = []

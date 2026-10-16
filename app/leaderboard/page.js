@@ -4,38 +4,43 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
 import { getCache, setCache, useIsomorphicLayoutEffect, getProfileCached } from '../../lib/clientCache'
+import { useAppStore } from '../../lib/store'
 import TopBar from '../../components/TopBar'
 
 export default function LeaderboardPage() {
   const router = useRouter()
   const [profile, setProfile] = useState(null)
-  const [leaders, setLeaders] = useState([])
-  const [userStats, setUserStats] = useState({})
   const [loading, setLoading] = useState(true)
 
-  // Instant paint from the persisted cache (before the browser paints — no flash)
+  // Subscribe to the store slices we render — re-renders only when these change.
+  // markViewed (called from the feed page) automatically decrements userStats[userId].unread,
+  // so the leaderboard reflects live reading without a backend round-trip.
+  const leaders   = useAppStore(s => s.leaders)
+  const userStats = useAppStore(s => s.userStats)
+  const { isLeaderboardFresh, setLeaderboardData, seedLeaderboardFromCache, setProfile: storeSetProfile } = useAppStore.getState()
+
+  // Instant paint from persisted cache (before the browser paints — no flash)
   useIsomorphicLayoutEffect(() => {
     const p = getCache('profile')
     const c = getCache('leaderboard')
     if (p) setProfile(p)
     if (c && p) {
-      setLeaders(c.leaders || [])
-      setUserStats(c.userStats || {})
+      // Seed UI from cache for instant paint, but do NOT mark as fresh —
+      // the useEffect below will still fire a real network fetch to verify.
+      seedLeaderboardFromCache(c.leaders || [], c.userStats || {})
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     async function load() {
-      // Unread counts change every time any user views a shabad, so always re-fetch
-      // the full leaderboard — the useIsomorphicLayoutEffect above already painted the
-      // cached version instantly, so users see content immediately then get fresh data.
       let token
 
       if (getCache('profile')) {
         const fast = await getProfileCached()
         if (fast) {
           setProfile(fast.profile)
+          storeSetProfile(fast.profile, fast.token)
           token = fast.token
         }
       }
@@ -49,17 +54,32 @@ export default function LeaderboardPage() {
         if (!prof || prof.must_change_password) { router.push('/change-password'); return }
         setProfile(prof)
         setCache('profile', prof)
+        storeSetProfile(prof, null)
 
         const { data: { session } } = await supabase.auth.getSession()
         token = session?.access_token
+      }
+
+      // Skip the network call when local data is fresh (< 5 min old).
+      // Cross-page reads (markViewed) have already updated userStats in the store,
+      // so the displayed unread counts are accurate without a re-fetch.
+      if (isLeaderboardFresh()) {
+        setLoading(false)
+        return
       }
 
       const res = await fetch('/api/leaderboard', {
         headers: { Authorization: `Bearer ${token}` },
       })
       const { users, stats } = await res.json()
-      setLeaders(users || [])
-      setUserStats(stats || {})
+
+      // Only update the store if the data actually changed to avoid unnecessary re-renders
+      const { leaders: cur, userStats: curStats } = useAppStore.getState()
+      const leadersChanged = JSON.stringify(users) !== JSON.stringify(cur)
+      const statsChanged   = JSON.stringify(stats)  !== JSON.stringify(curStats)
+      if (leadersChanged || statsChanged) {
+        setLeaderboardData(users || [], stats || {})
+      }
       setCache('leaderboard', { leaders: users || [], userStats: stats || {} })
 
       setLoading(false)

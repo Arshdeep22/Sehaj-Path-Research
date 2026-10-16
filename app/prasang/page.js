@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
 import { getCache, setCache, useIsomorphicLayoutEffect } from '../../lib/clientCache'
+import { useAppStore } from '../../lib/store'
 import { notifyPrasangAdded } from '../../lib/push'
 import TopBar from '../../components/TopBar'
 
 export default function PrasangPage() {
   const router = useRouter()
   const [profile, setProfile] = useState(null)
-  const [prasangs, setPrasangs] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [showAdd, setShowAdd] = useState(false)
@@ -25,12 +25,16 @@ export default function PrasangPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Store slice — re-renders only when prasangs array reference changes
+  const prasangs = useAppStore(s => s.prasangs)
+  const { isPrasangFresh, setPrasangs, seedPrasangsFromCache, addPrasang, updatePrasang, deletePrasang: storeDel } = useAppStore.getState()
+
   useIsomorphicLayoutEffect(() => {
     const p = getCache('profile')
     const c = getCache('prasang')
     if (p) setProfile(p)
     if (c && p) {
-      setPrasangs(c.prasangs || [])
+      seedPrasangsFromCache(c.prasangs || [])
       setLoading(false)
     }
   }, [])
@@ -45,6 +49,8 @@ export default function PrasangPage() {
       if (prof.role === 'admin') { router.push('/admin'); return }
       setProfile(prof)
       setCache('profile', prof)
+
+      if (isPrasangFresh()) { setLoading(false); return }
 
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/prasang', {
@@ -75,8 +81,8 @@ export default function PrasangPage() {
     })
     if (res.ok) {
       const { prasang, shouldNotify } = await res.json()
-      setPrasangs(prev => [...prev, prasang])
-      setCache('prasang', { prasangs: [...prasangs, prasang] })
+      addPrasang(prasang)
+      setCache('prasang', { prasangs: [...useAppStore.getState().prasangs] })
       if (shouldNotify) notifyPrasangAdded(prasang.id)
       setShowAdd(false)
       setNewTitle('')
@@ -96,9 +102,8 @@ export default function PrasangPage() {
     })
     if (res.ok) {
       const { prasang } = await res.json()
-      const updated = prasangs.map(p => p.id === prasang.id ? prasang : p)
-      setPrasangs(updated)
-      setCache('prasang', { prasangs: updated })
+      updatePrasang(prasang.id, prasang)
+      setCache('prasang', { prasangs: [...useAppStore.getState().prasangs] })
       setShowEdit(null)
     }
     setSavingEdit(false)
@@ -112,9 +117,8 @@ export default function PrasangPage() {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (res.ok) {
-      const updated = prasangs.filter(p => p.id !== prasangId)
-      setPrasangs(updated)
-      setCache('prasang', { prasangs: updated })
+      storeDel(prasangId)
+      setCache('prasang', { prasangs: [...useAppStore.getState().prasangs] })
       setShowDeleteConfirm(null)
     }
     setDeleting(false)

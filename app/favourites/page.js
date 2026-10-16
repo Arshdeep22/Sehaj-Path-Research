@@ -5,17 +5,22 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
 import { getCache, setCache, useIsomorphicLayoutEffect } from '../../lib/clientCache'
+import { useAppStore } from '../../lib/store'
 import TopBar from '../../components/TopBar'
 
 export default function FavouritesPage() {
   const router = useRouter()
   const [profile, setProfile] = useState(null)
-  const [shabads, setShabads] = useState([])
-  const [favourites, setFavourites] = useState(() => new Set())
-  const [kanth, setKanth] = useState(() => new Set())
   const [collapsed, setCollapsed] = useState({})
   const [loading, setLoading] = useState(true)
   const tokenRef = useRef(null)
+
+  // Store slices — subscribe narrowly so unrelated changes don't cause re-renders
+  const favShabads      = useAppStore(s => s.favShabads)
+  const favShabadsLoaded = useAppStore(s => s.favShabadsLoaded)
+  const favouriteIds    = useAppStore(s => s.favouriteIds)
+  const kanthIds        = useAppStore(s => s.kanthIds)
+  const { setFavShabads, removeFavShabad, toggleKanth, revertKanth } = useAppStore.getState()
 
   useIsomorphicLayoutEffect(() => {
     const p = getCache('profile')
@@ -34,21 +39,26 @@ export default function FavouritesPage() {
 
       const { data: { session } } = await supabase.auth.getSession()
       tokenRef.current = session?.access_token
+      const token = session?.access_token
 
-      const res = await fetch('/api/favourites', {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      })
-      const data = await res.json()
-      const list = data.shabads || []
-      setShabads(list)
-      setFavourites(new Set(list.map(s => s.id)))
+      // If favourites list is already in the store, use it directly
+      if (favShabadsLoaded) { setLoading(false); return }
 
-      // Load kanth state
-      const kRes = await fetch('/api/kanth', {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      })
-      const kData = await kRes.json()
-      setKanth(new Set((kData.shabads || []).map(s => s.id)))
+      const [favRes, kanthRes] = await Promise.all([
+        fetch('/api/favourites', { headers: { Authorization: `Bearer ${token}` } }),
+        // Only fetch kanth if not already in store
+        useAppStore.getState().kanthShabadsLoaded
+          ? Promise.resolve(null)
+          : fetch('/api/kanth', { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+
+      const favData = await favRes.json()
+      setFavShabads(favData.shabads || [])
+
+      if (kanthRes) {
+        const kData = await kanthRes.json()
+        useAppStore.getState().setKanthShabads(kData.shabads || [])
+      }
 
       setLoading(false)
     }
@@ -56,31 +66,33 @@ export default function FavouritesPage() {
   }, [router])
 
   function unfavourite(shabadId) {
-    setFavourites(prev => { const n = new Set(prev); n.delete(shabadId); return n })
+    removeFavShabad(shabadId)
     fetch(`/api/favourites/${shabadId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${tokenRef.current}` },
     }).catch(() => {
-      setFavourites(prev => { const n = new Set(prev); n.add(shabadId); return n })
+      // Revert: restore by re-fetching the list
+      fetch('/api/favourites', { headers: { Authorization: `Bearer ${tokenRef.current}` } })
+        .then(r => r.json())
+        .then(d => setFavShabads(d.shabads || []))
+        .catch(() => {})
     })
   }
 
-  function toggleKanth(shabadId) {
-    const wasKanth = kanth.has(shabadId)
-    setKanth(prev => { const n = new Set(prev); if (wasKanth) n.delete(shabadId); else n.add(shabadId); return n })
+  function handleToggleKanth(shabadId) {
+    const nowKanth = toggleKanth(shabadId)
     fetch(`/api/kanth/${shabadId}`, {
-      method: wasKanth ? 'DELETE' : 'POST',
+      method: nowKanth ? 'POST' : 'DELETE',
       headers: { Authorization: `Bearer ${tokenRef.current}` },
-    }).catch(() => {
-      setKanth(prev => { const n = new Set(prev); if (wasKanth) n.add(shabadId); else n.delete(shabadId); return n })
-    })
+    }).catch(() => revertKanth(shabadId, !nowKanth))
   }
 
   function toggleCollapse(topicId) {
     setCollapsed(prev => ({ ...prev, [topicId]: !prev[topicId] }))
   }
 
-  const visible = shabads.filter(s => favourites.has(s.id))
+  // favouriteIds is the membership source of truth; favShabads has the full objects
+  const visible = favShabads.filter(s => favouriteIds.includes(s.id))
 
   // Group by topic
   const groups = []
@@ -265,24 +277,24 @@ export default function FavouritesPage() {
                               )}
                               {/* Kanth toggle */}
                               <button
-                                onClick={() => toggleKanth(s.id)}
-                                title={kanth.has(s.id) ? 'ਕੰਠ ਤੋਂ ਹਟਾਓ' : 'ਕੰਠ ਕਰੋ'}
+                                onClick={() => handleToggleKanth(s.id)}
+                                title={kanthIds.includes(s.id) ? 'ਕੰਠ ਤੋਂ ਹਟਾਓ' : 'ਕੰਠ ਕਰੋ'}
                                 style={{
                                   width: 28, height: 28, borderRadius: '50%',
                                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  background: kanth.has(s.id) ? 'rgba(139,92,246,0.1)' : 'rgba(245,158,11,0.08)',
-                                  border: `1px solid ${kanth.has(s.id) ? 'rgba(139,92,246,0.3)' : 'rgba(245,158,11,0.2)'}`,
+                                  background: kanthIds.includes(s.id) ? 'rgba(139,92,246,0.1)' : 'rgba(245,158,11,0.08)',
+                                  border: `1px solid ${kanthIds.includes(s.id) ? 'rgba(139,92,246,0.3)' : 'rgba(245,158,11,0.2)'}`,
                                   cursor: 'pointer',
                                 }}
                               >
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                  stroke={kanth.has(s.id) ? '#8b5cf6' : '#b45309'}
+                                  stroke={kanthIds.includes(s.id) ? '#8b5cf6' : '#b45309'}
                                   strokeLinecap="round" strokeLinejoin="round">
-                                  <path fill={kanth.has(s.id) ? 'rgba(139,92,246,0.15)' : 'none'} strokeWidth="1.8"
+                                  <path fill={kanthIds.includes(s.id) ? 'rgba(139,92,246,0.15)' : 'none'} strokeWidth="1.8"
                                     d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.99-3.01 3 3 0 0 1 .34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3z" />
-                                  <path fill={kanth.has(s.id) ? 'rgba(139,92,246,0.15)' : 'none'} strokeWidth="1.8"
+                                  <path fill={kanthIds.includes(s.id) ? 'rgba(139,92,246,0.15)' : 'none'} strokeWidth="1.8"
                                     d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.99-3.01 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3z" />
-                                  <circle cx="19" cy="5" r="4.5" fill={kanth.has(s.id) ? 'rgba(139,92,246,0.12)' : 'white'} strokeWidth="1.3" />
+                                  <circle cx="19" cy="5" r="4.5" fill={kanthIds.includes(s.id) ? 'rgba(139,92,246,0.12)' : 'white'} strokeWidth="1.3" />
                                   <path d="M19 2.8v4.4M16.8 5h4.4" strokeWidth="1.6" />
                                 </svg>
                               </button>
