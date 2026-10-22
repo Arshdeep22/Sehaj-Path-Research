@@ -70,6 +70,7 @@ export default function JhalakPage() {
   const tokenRef = useRef(null)
   const reelRef = useRef(null)
   const viewedRef = useRef(new Set()) // shabadIds already marked viewed this session
+  const prevActiveIndexRef = useRef(0) // tracks previous activeIndex to fill gaps on fast scroll
   const startIndexRef = useRef(0)
   const didInitScrollRef = useRef(false)
 
@@ -124,9 +125,9 @@ export default function JhalakPage() {
       // Seed the store — computes unreadCount and propagates favourites/kanth/viewedIds
       setFeedData({ shabads: shabadList, views: viewsMap, viewedIds: data.viewedIds, favouriteIds: data.favouriteIds, kanthIds: data.kanthIds, currentUserId: userId })
 
-      // Anything already viewed shouldn't be re-posted this session
-      for (const s of shabadList) {
-        if ((viewsMap[s.id] || []).some(v => v.user_id === userId)) viewedRef.current.add(s.id)
+      // Seed viewedRef from the authoritative per-user list so we don't re-post views
+      for (const id of (data.viewedIds || [])) {
+        viewedRef.current.add(id)
       }
 
       setLoading(false)
@@ -196,32 +197,40 @@ export default function JhalakPage() {
     return () => { root.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
   }, [loading, feedItems.length])
 
-  // Mark the focused card as viewed — background fire-and-forget.
-  // markViewed updates the store (unreadCount + leaderboard userStats) so all
-  // subscribed components (TopBar badge, leaderboard unread) update automatically.
+  // Mark every card between the previous and current active index as viewed.
+  // The RAF-debounced scroll handler can jump multiple cards on a fast flick —
+  // filling the gap ensures every card the user scrolled past gets marked and posted.
   useEffect(() => {
     if (loading) return
-    const item = feedItems[activeIndex]
-    if (!item || viewedRef.current.has(item.id)) return
-    viewedRef.current.add(item.id)
 
-    // Update store: decrements unreadCount and propagates to leaderboard slice
-    markViewed(item.id)
+    const from = prevActiveIndexRef.current
+    const to   = activeIndex
+    prevActiveIndexRef.current = to
 
-    // optimistic: add me to this card's viewers (local state only — not stored globally)
-    setViews(prev => {
-      const current = prev[item.id] || []
-      if (current.some(v => v.user_id === currentUserId)) return prev
-      return {
-        ...prev,
-        [item.id]: [...current, { user_id: currentUserId, full_name: profile?.full_name, username: profile?.username }],
-      }
-    })
+    const start = Math.min(from, to)
+    const end   = Math.max(from, to)
 
-    fetch(`/api/feed/${item.id}/view`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${tokenRef.current}` },
-    }).catch(() => {})
+    for (let i = start; i <= end; i++) {
+      const item = feedItems[i]
+      if (!item || viewedRef.current.has(item.id)) continue
+      viewedRef.current.add(item.id)
+
+      markViewed(item.id)
+
+      setViews(prev => {
+        const current = prev[item.id] || []
+        if (current.some(v => v.user_id === currentUserId)) return prev
+        return {
+          ...prev,
+          [item.id]: [...current, { user_id: currentUserId, full_name: profile?.full_name, username: profile?.username }],
+        }
+      })
+
+      fetch(`/api/feed/${item.id}/view`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenRef.current}` },
+      }).catch(() => {})
+    }
   }, [activeIndex, loading])
 
   if (loading) {
