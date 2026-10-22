@@ -40,26 +40,40 @@ export default function TopicsPage() {
 
   useEffect(() => {
     async function load() {
-      // Fast path: if both caches are warm (shared localStorage from main window),
-      // skip getUser()+profiles.select() — useIsomorphicLayoutEffect already painted the UI.
-      if (getCache('profile') && getCache('topics')) {
+      let prof, token
+
+      // Fast auth: skip supabase.auth.getUser() + profiles.select() when session is cached.
+      // We still always fetch fresh topics below — cache is only used for instant paint.
+      if (getCache('profile')) {
         const fast = await getProfileCached()
-        if (fast) { setProfile(fast.profile); setLoading(false); return }
+        if (fast) {
+          setProfile(fast.profile)
+          prof = fast.profile
+          token = fast.token
+        }
       }
 
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/'); return }
+      if (!prof) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { router.push('/'); return }
 
-      const [{ data: prof }, { data: topicsData }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('topics').select('*').order('created_at', { ascending: true }),
-      ])
+        const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+        if (!p) { router.push('/'); return }
+        if (p.must_change_password) { router.push('/change-password'); return }
+        if (p.role === 'admin') { router.push('/admin'); return }
+        setProfile(p)
+        setCache('profile', p)
+        prof = p
+        const { data: { session } } = await supabase.auth.getSession()
+        token = session?.access_token
+      }
 
-      if (!prof) { router.push('/'); return }
-      if (prof.must_change_password) { router.push('/change-password'); return }
-      if (prof.role === 'admin') { router.push('/admin'); return }
-      setProfile(prof)
-      setCache('profile', prof)
+      // Always fetch fresh topics — the cache is only for the instant layout paint.
+      // Skipping this caused newly-added topics to stay invisible until cache expired.
+      const { data: topicsData } = await supabase
+        .from('topics')
+        .select('*')
+        .order('created_at', { ascending: true })
 
       const list = topicsData || []
 
