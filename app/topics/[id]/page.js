@@ -7,6 +7,7 @@ import { supabase } from '../../../lib/supabaseClient'
 import { getCache, setCache, removeCache, useIsomorphicLayoutEffect } from '../../../lib/clientCache'
 import { notifyShabadAdded } from '../../../lib/push'
 import TopBar from '../../../components/TopBar'
+import VoiceTextarea from '../../../components/VoiceTextarea'
 
 export default function TopicDetailPage() {
   const router = useRouter()
@@ -490,7 +491,7 @@ export default function TopicDetailPage() {
               </div>
               <div>
                 <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਤੁਹਾਡੀ ਟਿੱਪਣੀ *</label>
-                <textarea className="textarea-royal" placeholder="ਇਹ ਸ਼ਬਦ ਇਸ ਵਿਸ਼ੇ ਨਾਲ ਕਿਵੇਂ ਸੰਬੰਧਿਤ ਹੈ..." value={shabadComment} onChange={e => setShabadComment(e.target.value)} rows={3} required />
+                <VoiceTextarea placeholder="ਇਹ ਸ਼ਬਦ ਇਸ ਵਿਸ਼ੇ ਨਾਲ ਕਿਵੇਂ ਸੰਬੰਧਿਤ ਹੈ..." value={shabadComment} onChange={e => setShabadComment(e.target.value)} rows={3} required />
                 <p className="text-xs mt-1 text-right" style={{ color: shabadComment.trim().length >= 50 ? 'rgba(22,163,74,0.8)' : 'rgba(239,68,68,0.7)' }}>
                   {shabadComment.trim().length}/50 ਅੱਖਰ
                 </p>
@@ -594,7 +595,7 @@ export default function TopicDetailPage() {
               </div>
               <div>
                 <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਟਿੱਪਣੀ (ਵਿਕਲਪਿਕ)</label>
-                <textarea className="textarea-royal" value={editShabadComment} onChange={e => setEditShabadComment(e.target.value)} rows={3} />
+                <VoiceTextarea value={editShabadComment} onChange={e => setEditShabadComment(e.target.value)} rows={3} />
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowEditShabad(null)} className="btn-ghost flex-1 py-3">ਰੱਦ ਕਰੋ</button>

@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabaseClient'
 import { getCache, setCache, removeCache, useIsomorphicLayoutEffect, getProfileCached } from '../../lib/clientCache'
 import { notifyQuestionAdded } from '../../lib/push'
 import TopBar from '../../components/TopBar'
+import VoiceTextarea from '../../components/VoiceTextarea'
 
 export default function PrashanPage() {
   const router = useRouter()
@@ -613,7 +614,7 @@ export default function PrashanPage() {
               </div>
               <div>
                 <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਤੁਹਾਡੀ ਟਿੱਪਣੀ *</label>
-                <textarea className="textarea-royal" placeholder="ਇਹ ਸ਼ਬਦ ਪ੍ਰਸ਼ਨ ਦਾ ਉੱਤਰ ਕਿਵੇਂ ਦਿੰਦਾ ਹੈ..." value={ansComment} onChange={e => setAnsComment(e.target.value)} rows={3} required />
+                <VoiceTextarea placeholder="ਇਹ ਸ਼ਬਦ ਪ੍ਰਸ਼ਨ ਦਾ ਉੱਤਰ ਕਿਵੇਂ ਦਿੰਦਾ ਹੈ..." value={ansComment} onChange={e => setAnsComment(e.target.value)} rows={3} required />
                 <p className="text-xs mt-1 text-right" style={{ color: ansComment.trim().length >= 50 ? 'rgba(22,163,74,0.8)' : 'rgba(239,68,68,0.7)' }}>
                   {ansComment.trim().length}/50 ਅੱਖਰ
                 </p>
@@ -639,7 +640,7 @@ export default function PrashanPage() {
               </div>
               <div>
                 <label className="block text-sm mb-1.5" style={{ color: 'rgba(12,36,64,0.6)' }}>ਟਿੱਪਣੀ</label>
-                <textarea className="textarea-royal" value={editAnsComment} onChange={e => setEditAnsComment(e.target.value)} rows={3} />
+                <VoiceTextarea value={editAnsComment} onChange={e => setEditAnsComment(e.target.value)} rows={3} />
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setEditAns(null)} className="btn-ghost flex-1 py-3">ਰੱਦ ਕਰੋ</button>
