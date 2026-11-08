@@ -13,7 +13,7 @@ const CATEGORIES = [
     key: 'gurmantar',
     label: 'ਗੁਰਮੰਤਰ',
     emoji: '🌼',
-    weeklyTarget: 80000,
+    weeklyTarget: 100000,
     keywords: ['ਗੁਰਮੰਤਰ', 'ਗੁਰਮੰਤ੍ਰ', 'ਗੁਰਮੰਤ', 'gurmantar', 'mantar'],
   },
   {
@@ -48,7 +48,7 @@ const CATEGORIES = [
     key: 'sehajpath',
     label: 'ਸਹਿਜ ਪਾਠ',
     emoji: '📖',
-    weeklyTarget: 150,
+    weeklyTarget: 7,
     keywords: ['ਸਹਿਜ ਪਾਠ', 'ਸਹਿਜਪਾਠ', 'ਸਹਿਜ', 'sehaj path', 'sehajpath', 'sehaj'],
   },
 ]
@@ -340,12 +340,14 @@ function buildReport(messages, memberNames = [], removedNames = new Set()) {
       failReason = 'ਕੋਈ ਰਿਪੋਰਟ ਸੁਨੇਹਾ ਨਹੀਂ ਮਿਲਿਆ'
     } else if (!catResults.gurmantar.passed) {
       failReason = 'ਗੁਰਮੰਤਰ ਟੀਚਾ ਪੂਰਾ ਨਹੀਂ ਹੋਇਆ'
+    } else if (!catResults.sehajpath.passed) {
+      failReason = 'ਸਹਿਜ ਪਾਠ ਟੀਚਾ ਪੂਰਾ ਨਹੀਂ ਹੋਇਆ'
     } else {
-      const otherPassed = CATEGORIES.filter(c => c.key !== 'gurmantar' && catResults[c.key].passed)
+      const otherPassed = CATEGORIES.filter(c => c.key !== 'gurmantar' && c.key !== 'sehajpath' && catResults[c.key].passed)
       if (otherPassed.length >= 2) {
         finalStatus = 'pass'
       } else {
-        failReason = `ਗੁਰਮੰਤਰ ਪਾਸ, ਪਰ ਸਿਰਫ਼ ${otherPassed.length} ਹੋਰ ਖੇਤਰ ਪਾਸ (੨ ਚਾਹੀਦੇ)`
+        failReason = `ਗੁਰਮੰਤਰ ਅਤੇ ਸਹਿਜ ਪਾਠ ਪਾਸ, ਪਰ ਸਿਰਫ਼ ${otherPassed.length} ਹੋਰ ਖੇਤਰ ਪਾਸ (੨ ਚਾਹੀਦੇ)`
       }
     }
 
@@ -509,7 +511,7 @@ export default function ChatReportPage() {
                   ))}
                 </div>
                 <p className="text-xs mt-3" style={{ color: 'rgba(12,36,64,0.38)' }}>
-                  ਪਾਸ ਹੋਣ ਲਈ: ਗੁਰਮੰਤਰ + ਘੱਟੋ-ਘੱਟ ੨ ਹੋਰ ਖੇਤਰ ਪੂਰੇ ਕਰਨੇ ਜ਼ਰੂਰੀ ਹਨ
+                  ਪਾਸ ਹੋਣ ਲਈ: ਗੁਰਮੰਤਰ + ਸਹਿਜ ਪਾਠ (ਦੋਵੇਂ ਲਾਜ਼ਮੀ) + ਘੱਟੋ-ਘੱਟ ੨ ਹੋਰ ਖੇਤਰ ਜ਼ਰੂਰੀ ਹਨ
                 </p>
               </div>
             )}
@@ -779,7 +781,7 @@ function FinalFailTab({ users }) {
           {users.length} ਵਰਤੋਂਕਾਰ ਅੰਤਮ ਫ਼ੇਲ੍ਹ
         </p>
         <p className="text-xs mt-0.5" style={{ color: 'rgba(12,36,64,0.4)' }}>
-          ਪਾਸ ਹੋਣ ਲਈ: ਗੁਰਮੰਤਰ + ੨ ਹੋਰ ਖੇਤਰ ਜ਼ਰੂਰੀ ਹਨ
+          ਪਾਸ ਹੋਣ ਲਈ: ਗੁਰਮੰਤਰ + ਸਹਿਜ ਪਾਠ (ਦੋਵੇਂ ਲਾਜ਼ਮੀ) + ੨ ਹੋਰ ਖੇਤਰ ਜ਼ਰੂਰੀ ਹਨ
         </p>
       </div>
       <div className="overflow-x-auto">
