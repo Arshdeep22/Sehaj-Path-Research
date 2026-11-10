@@ -11,6 +11,7 @@ import CalendarHeatmap from '../../components/charts/CalendarHeatmap'
 import LineChart from '../../components/charts/LineChart'
 import VelaChart from '../../components/charts/VelaChart'
 import Carousel from '../../components/charts/Carousel'
+import JaapEntryModal from '../../components/JaapEntryModal'
 
 // Card display order (ਹੱਥੀ ਸੇਵਾ right after ਗੁਰਮੰਤਰ).
 const CARD_ORDER = ['gurmantar', 'sewa', 'brahmkavach', 'birharhe', 'japji', 'sehajpath']
@@ -95,24 +96,31 @@ function JivanInner() {
   const [data, setData] = useState(null)
   const [filter, setFilter] = useState('week')
   const [velaActive, setVelaActive] = useState(0)
+  const [token, setToken] = useState(null)
+  const [showEntry, setShowEntry] = useState(false)
+
+  async function reloadAnalytics(tok) {
+    const qs = viewProfileId ? `?profileId=${viewProfileId}` : ''
+    const res = await fetch(`/api/jaap/analytics${qs}`, { headers: { Authorization: `Bearer ${tok}` } })
+    setData(await res.json())
+  }
 
   useEffect(() => {
     async function load() {
-      let token
+      let tok
       const fast = await getProfileCached()
-      if (fast) { setProfile(fast.profile); token = fast.token }
-      if (!token) {
+      if (fast) { setProfile(fast.profile); tok = fast.token }
+      if (!tok) {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { router.push('/'); return }
         const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
         if (!prof || prof.must_change_password) { router.push('/change-password'); return }
         setProfile(prof)
         const { data: { session } } = await supabase.auth.getSession()
-        token = session?.access_token
+        tok = session?.access_token
       }
-      const qs = viewProfileId ? `?profileId=${viewProfileId}` : ''
-      const res = await fetch(`/api/jaap/analytics${qs}`, { headers: { Authorization: `Bearer ${token}` } })
-      setData(await res.json())
+      setToken(tok)
+      await reloadAnalytics(tok)
       setLoading(false)
     }
     load()
@@ -176,6 +184,26 @@ function JivanInner() {
             <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: 'rgba(14,65,110,0.08)', color: '#1a5f8f' }}>ਐਡਮਿਨ</span>
           )}
         </div>
+
+        {!isAdminView && (
+          <div className="flex justify-center mb-4 animate-fadeInUp">
+            <button onClick={() => setShowEntry(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
+              style={{ background: 'linear-gradient(135deg, #38bdf8 0%, #2a84c7 100%)', boxShadow: '0 4px 14px rgba(56,189,248,0.35)' }}>
+              <span className="text-lg leading-none">＋</span> ਹਾਜ਼ਰੀ ਜੋੜੋ
+            </button>
+          </div>
+        )}
+
+        {showEntry && (
+          <JaapEntryModal
+            token={token}
+            byDate={byDate}
+            defaultDate={new Date().toISOString().slice(0, 10)}
+            onClose={() => setShowEntry(false)}
+            onSaved={async () => { await reloadAnalytics(token); setShowEntry(false) }}
+          />
+        )}
 
         {mine.length === 0 ? (
           <EmptyState isAdminView={isAdminView} />
