@@ -119,6 +119,26 @@ html, body {
       inset 0 1px 0 rgba(255, 255, 255, 0.95);
   }
 
+  /* Elevated, tactile cards for the Jivan analytics page */
+  .jivan-card-3d {
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    box-shadow:
+      0 1px 2px rgba(12, 36, 64, 0.10),
+      0 4px 10px rgba(12, 36, 64, 0.10),
+      0 12px 28px rgba(12, 36, 64, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 1),
+      inset 0 -1px 2px rgba(12, 36, 64, 0.05);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+  }
+  .jivan-card-3d:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 2px 4px rgba(12, 36, 64, 0.10),
+      0 8px 18px rgba(12, 36, 64, 0.12),
+      0 20px 40px rgba(12, 36, 64, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 1);
+  }
+
   /* ---- 3D Buttons ---- */
   .btn-royal {
     @apply relative inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold cursor-pointer select-none overflow-hidden;

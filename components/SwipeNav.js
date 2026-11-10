@@ -3,7 +3,7 @@
 import { useEffect, useRef, startTransition } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 
-const TABS = ['/topics', '/prashan', '/jhalak', '/leaderboard']
+const TABS = ['/topics', '/prashan', '/jhalak', '/jivan', '/leaderboard']
 const THRESHOLD = 0.38
 
 export default function SwipeNav() {
@@ -107,6 +107,8 @@ export default function SwipeNav() {
       g.startX = e.touches[0].clientX
       g.startY = e.touches[0].clientY
       g.on = false; g.locked = false; g.dir = null
+      // Let inner horizontal scrollers (e.g. the vela carousel) own the gesture.
+      if (e.target?.closest?.('[data-hswipe]')) g.locked = true
     }
 
     function onMove(e) {

@@ -5,285 +5,15 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../../../lib/supabaseClient'
 import TopBar from '../../../components/TopBar'
 import JSZip from 'jszip'
-
-// ── Targets ──────────────────────────────────────────────────────────────────
-
-const CATEGORIES = [
-  {
-    key: 'gurmantar',
-    label: 'ਗੁਰਮੰਤਰ',
-    emoji: '🌼',
-    weeklyTarget: 100000,
-    keywords: ['ਗੁਰਮੰਤਰ', 'ਗੁਰਮੰਤ੍ਰ', 'ਗੁਰਮੰਤ', 'gurmantar', 'mantar'],
-  },
-  {
-    key: 'brahmkavach',
-    label: 'ਬ੍ਰਹਮਕਵੱਚ',
-    emoji: '⚔️',
-    weeklyTarget: 40,
-    keywords: ['ਬ੍ਰਹਮਕਵੱਚ', 'ਬ੍ਰਹਮ ਕਵਚ', 'ਕਵੱਚ', 'ਕਵਚ', 'brahmkavach', 'kavach'],
-  },
-  {
-    key: 'birharhe',
-    label: 'ਬਿਰਹੜੇ',
-    emoji: '💘',
-    weeklyTarget: 15,
-    keywords: ['ਬਿਰਹੜੇ', 'ਬਿਰਹ', 'birharhe', 'birhare'],
-  },
-  {
-    key: 'japji',
-    label: 'ਜਪਜੀ ਸਾਹਿਬ',
-    emoji: '⏰',
-    weeklyTarget: 3.5,
-    keywords: ['ਜਪਜੀ', 'ਜਪੁਜੀ', 'ਉਠਦਿਆ', 'japji'],
-  },
-  {
-    key: 'sewa',
-    label: 'ਹੱਥੀ ਸੇਵਾ',
-    emoji: '🤲🏻',
-    weeklyTarget: 5,
-    keywords: ['ਸੇਵਾ', 'ਹੱਥੀ', 'sewa'],
-  },
-  {
-    key: 'sehajpath',
-    label: 'ਸਹਿਜ ਪਾਠ',
-    emoji: '📖',
-    weeklyTarget: 7,
-    keywords: ['ਸਹਿਜ ਪਾਠ', 'ਸਹਿਜਪਾਠ', 'ਸਹਿਜ', 'sehaj path', 'sehajpath', 'sehaj'],
-  },
-]
-
-// ── Parsing helpers ───────────────────────────────────────────────────────────
-
-function punjNumToArabic(str) {
-  return str
-    .replace(/੦/g, '0').replace(/੧/g, '1').replace(/੨/g, '2').replace(/੩/g, '3')
-    .replace(/੪/g, '4').replace(/੫/g, '5').replace(/੬/g, '6').replace(/੭/g, '7')
-    .replace(/੮/g, '8').replace(/੯/g, '9')
-}
-
-function extractNumber(text) {
-  const normalized = punjNumToArabic(text).replace(/,/g, '').replace(/،/g, '')
-  const matches = [...normalized.matchAll(/\d+(?:\.\d+)?/g)]
-  if (!matches.length) return null
-  // Use the largest number — avoids taking small ordinals like ੧ in "੧ ਹਫ਼ਤੇ - ੬੦,੦੦੦"
-  return Math.max(...matches.map(m => parseFloat(m[0])))
-}
-
-// Parse a timestamp from a WhatsApp message line (returns Date or null)
-function parseLineTimestamp(line) {
-  // New format: DD/MM/YY, H:MM am/pm
-  const m1 = line.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4}),\s*(\d{1,2}):(\d{2})\s*([ap]m)/i)
-  if (m1) {
-    let [, d, mo, y, h, min, ap] = m1
-    let year = parseInt(y); if (year < 100) year += 2000
-    let hour = parseInt(h)
-    const isPm = ap.toLowerCase() === 'pm'
-    if (isPm && hour !== 12) hour += 12
-    if (!isPm && hour === 12) hour = 0
-    return new Date(year, parseInt(mo) - 1, parseInt(d), hour, parseInt(min))
-  }
-  // Old format: [M/D/YY, H:MM:SS AM/PM]
-  const m2 = line.match(/^\[(\d{1,2})\/(\d{1,2})\/(\d{2,4}),\s*(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([AaPp][Mm]))?\]/)
-  if (m2) {
-    let [, mo, d, y, h, min, ap] = m2
-    let year = parseInt(y); if (year < 100) year += 2000
-    let hour = parseInt(h)
-    if (ap) {
-      const isPm = ap.toLowerCase() === 'pm'
-      if (isPm && hour !== 12) hour += 12
-      if (!isPm && hour === 12) hour = 0
-    }
-    return new Date(year, parseInt(mo) - 1, parseInt(d), hour, parseInt(min))
-  }
-  return null
-}
-
-// Returns { start, end } for the reporting week anchored to refDate.
-// Week = Sunday to Saturday. End always extends to the following Sunday 11 AM
-// so people who submit their report on Sunday morning are always included.
-function getReportWeekRange(refDate = new Date()) {
-  const d = refDate.getDay()
-  // Days back to reach the most recent Saturday:
-  // Sun(0)→1, Mon(1)→2, ..., Fri(5)→6, Sat(6)→0
-  const daysToSat = d === 6 ? 0 : d + 1
-
-  const reportSaturday = new Date(refDate)
-  reportSaturday.setDate(reportSaturday.getDate() - daysToSat)
-  reportSaturday.setHours(0, 0, 0, 0)
-
-  const reportSunday = new Date(reportSaturday)
-  reportSunday.setDate(reportSunday.getDate() - 6)
-
-  // Extend end to the Sunday AFTER the reporting Saturday at 6 PM.
-  // Final week reports often come in until early afternoon; new-week reports
-  // start around 9 PM, so 6 PM is a safe cutoff that captures both.
-  const sundayAfter = new Date(reportSaturday)
-  sundayAfter.setDate(sundayAfter.getDate() + 1)
-  sundayAfter.setHours(18, 0, 0, 0)
-
-  return { start: reportSunday, end: sundayAfter }
-}
-
-function fmtDate(d) {
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-}
-
-// Keep only up to and including "Singh" / "Kaur" (English or Punjabi)
-function truncateName(name) {
-  const m = name.match(/(.*?(singh|kaur|ਸਿੰਘ|ਕੌਰ))/i)
-  return m ? m[1].trim() : name
-}
-
-function parseMessageForCategories(text) {
-  const lines = text.split('\n')
-  const result = {}
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    for (const cat of CATEGORIES) {
-      if (result[cat.key] !== undefined) continue
-      if (cat.keywords.some(kw => line.includes(kw))) {
-        // Try number on the same line first
-        const num = extractNumber(line)
-        if (num !== null) {
-          result[cat.key] = num
-        } else {
-          // Look ahead up to 4 lines for weekly count (prefer line with ਹਫ਼ਤ/week)
-          let fallbackNum = null
-          let weeklyNum = null
-          for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
-            const nxt = lines[j]
-            // Stop if another category keyword appears
-            if (CATEGORIES.some(c => c.key !== cat.key && c.keywords.some(kw => nxt.includes(kw)))) break
-            const n = extractNumber(nxt)
-            if (n !== null) {
-              if (fallbackNum === null) fallbackNum = n
-              if (/ਹਫ਼ਤ|ਹਫ਼ਤੇ|ਹਫ਼ਤਾ|week/i.test(nxt) && weeklyNum === null) weeklyNum = n
-            }
-          }
-          const chosen = weeklyNum ?? fallbackNum
-          if (chosen !== null) result[cat.key] = chosen
-        }
-      }
-    }
-  }
-  return result
-}
-
-// Parse WhatsApp chat text into array of { sender, text } messages.
-// Handles all known export formats:
-//   New (Android/iPhone no-bracket): DD/MM/YY, H:MM am/pm - Name: text
-//   New system:                      DD/MM/YY, H:MM am/pm - event text
-//   Old (bracket):                   [M/D/YY, H:MM:SS AM/PM] Name: text
-//   Old bracket+dash:                [M/D/YY, H:MM:SS AM/PM] - text
-//   Markdown section:                [HH:MM] Name: text
-function parseWhatsAppChat(rawText) {
-  const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  const lines = text.split('\n')
-  const messages = []
-  // Track add/remove events in order; last event per person determines current status
-  const memberHistory = new Map() // name → 'add' | 'remove'
-  let current = null
-
-  function recordMemberEvent(name, action) {
-    const n = name.trim()
-    if (n) memberHistory.set(n, action)
-  }
-
-  function extractMembersFromContent(content) {
-    const youAdded = content.match(/^You added (.+)$/i)
-    if (youAdded) { youAdded[1].split(' and ').forEach(n => recordMemberEvent(n, 'add')); return }
-    const youRemoved = content.match(/^You removed (.+)$/i)
-    if (youRemoved) { recordMemberEvent(youRemoved[1], 'remove'); return }
-    // "X left" (member left voluntarily)
-    const xLeft = content.match(/^(.+)\s+left$/i)
-    if (xLeft) { recordMemberEvent(xLeft[1], 'remove'); return }
-    // "X added Y" (another member adds someone)
-    const xAdded = content.match(/^.+ added (.+)$/i)
-    if (xAdded) recordMemberEvent(xAdded[1], 'add')
-  }
-
-  const SYSTEM_RE = [
-    /^You (added|removed|changed|created|turned|left|updated)/i,
-    /\b(added|removed|left|turned off disappearing|joined using|was added)\b/i,
-    /^\[System notification\]$/,
-    /^Messages and calls are end-to-end/,
-    /^<Media omitted>$/,
-    /^This message was deleted$/,
-    /^null$/,
-  ]
-  const isSystem = t => SYSTEM_RE.some(r => r.test(t.trim()))
-
-  // Timestamp prefix patterns (for flushing current message)
-  const TIMESTAMP_RE = /^(?:\[?\d{1,2}\/\d{1,2}\/\d{2,4}[,\s]|\d{1,2}\/\d{1,2}\/\d{2,4},)/
-
-  for (const line of lines) {
-    // ── New format (no brackets): DD/MM/YY, H:MM am/pm - Name: text
-    const newNamed = line.match(
-      /^\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}\s*[ap]m\s*-\s*([^:]+?):\s*(.*)/i
-    )
-    // ── New format (no brackets): DD/MM/YY, H:MM am/pm - system/own text  (no colon in sender)
-    const newSystem = !newNamed && line.match(
-      /^\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}\s*[ap]m\s*-\s*(.*)/i
-    )
-    // ── Old format (brackets, uppercase AM/PM): [M/D/YY, H:MM:SS AM/PM] Name: text
-    const oldNamed = !newNamed && !newSystem && line.match(
-      /^\[\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AaPp][Mm])?\]\s+([^:\-[\]]+[^:\s]):\s*(.*)/
-    )
-    // ── Old format (brackets): [M/D/YY, H:MM:SS AM/PM] - text
-    const oldDash = !newNamed && !newSystem && !oldNamed && line.match(
-      /^\[\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AaPp][Mm])?\]\s+-\s+(.*)/
-    )
-    // ── Markdown section format: [HH:MM] Name: text
-    const mdNamed = !newNamed && !newSystem && !oldNamed && !oldDash && line.match(
-      /^\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s+([^_:[\]<>][^:[\]<>]*?):\s+(.*)/
-    )
-
-    if (newNamed) {
-      if (current) messages.push(current)
-      current = { sender: newNamed[1].trim(), text: newNamed[2], timestamp: parseLineTimestamp(line) }
-    } else if (newSystem) {
-      if (current) messages.push(current)
-      const content = newSystem[1]
-      if (isSystem(content)) { extractMembersFromContent(content); current = null }
-      else current = { sender: 'You', text: content, timestamp: parseLineTimestamp(line) }
-    } else if (oldNamed) {
-      if (current) messages.push(current)
-      current = { sender: oldNamed[1].trim(), text: oldNamed[2], timestamp: parseLineTimestamp(line) }
-    } else if (oldDash) {
-      if (current) messages.push(current)
-      const content = oldDash[1]
-      if (isSystem(content)) { extractMembersFromContent(content); current = null }
-      else current = { sender: 'You', text: content, timestamp: parseLineTimestamp(line) }
-    } else if (mdNamed) {
-      if (current) messages.push(current)
-      current = { sender: mdNamed[2].trim(), text: mdNamed[3], timestamp: null }
-    } else if (TIMESTAMP_RE.test(line) || line.startsWith('## ') || line.startsWith('# ') || line.startsWith('---')) {
-      if (current) messages.push(current)
-      current = null
-    } else if (current) {
-      current.text += '\n' + line
-    }
-  }
-  if (current) messages.push(current)
-  // Derive current members (last event = 'add') and removed members (last event = 'remove')
-  const memberNames = []
-  const removedNames = new Set()
-  for (const [name, action] of memberHistory) {
-    if (action === 'add') memberNames.push(name)
-    else removedNames.add(name)
-  }
-  return { messages, memberNames, removedNames }
-}
-
-// Find the most recent message from a user that has parseable data
-function getLatestReport(texts) {
-  for (let i = texts.length - 1; i >= 0; i--) {
-    const parsed = parseMessageForCategories(texts[i])
-    if (Object.keys(parsed).length > 0) return parsed
-  }
-  return null
-}
+import {
+  CATEGORIES,
+  fmtDate,
+  truncateName,
+  parseWhatsAppChat,
+  getReportWeekRange,
+  getLatestReport,
+  buildDailyRecords,
+} from '../../../lib/jaapParser'
 
 // Build full report array from raw messages
 function buildReport(messages, memberNames = [], removedNames = new Set()) {
@@ -369,6 +99,10 @@ export default function ChatReportPage() {
   const [report, setReport] = useState(null)
   const [weekRange, setWeekRange] = useState(null)
   const [activeTab, setActiveTab] = useState('report')
+  const [chatData, setChatData] = useState(null)        // { messages, removedNames } kept for DB import
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState('')
+  const [mapping, setMapping] = useState(null)          // { unmappedNames, users } after import
   const fileRef = useRef(null)
 
   useEffect(() => {
@@ -414,6 +148,9 @@ export default function ChatReportPage() {
 
       const { users, weekStart, weekEnd } = buildReport(messages, memberNames, removedNames)
       setReport(users)
+      setChatData({ messages, removedNames })
+      setSaveMsg('')
+      setMapping(null)
       setWeekRange({ start: weekStart, end: weekEnd })
       setActiveTab('report')
     } catch (err) {
@@ -421,6 +158,53 @@ export default function ChatReportPage() {
     }
 
     setProcessing(false)
+  }
+
+  // Build daily records from the whole chat and persist them, then surface any
+  // WhatsApp names that still need mapping to an app user.
+  async function handleSaveToDb() {
+    if (!chatData) return
+    setSaving(true)
+    setSaveMsg('')
+    try {
+      const records = buildDailyRecords(chatData.messages, chatData.removedNames)
+      if (!records.length) { setSaveMsg('ਕੋਈ ਰੋਜ਼ਾਨਾ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲੇ'); setSaving(false); return }
+
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      const res = await fetch('/api/admin/jaap-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ records }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'ਸੰਭਾਲਣ ਵਿੱਚ ਗਲਤੀ')
+
+      const autoMsg = json.autoMappedCount ? ` · ${json.autoMappedCount} ਨਾਮ ਪਹਿਲਾਂ ਤੋਂ ਜੁੜੇ` : ''
+      setSaveMsg(`✓ ${json.imported} ਰਿਕਾਰਡ ਸੰਭਾਲੇ ਗਏ${autoMsg}`)
+
+      if (json.unmappedNames?.length) {
+        const aliasRes = await fetch('/api/admin/jaap-aliases', { headers: { Authorization: `Bearer ${token}` } })
+        const aliasJson = await aliasRes.json()
+        setMapping({ unmappedNames: json.unmappedNames, users: aliasJson.users || [] })
+      } else {
+        setMapping(null)
+      }
+    } catch (err) {
+      setSaveMsg('⚠️ ' + (err.message || 'ਗਲਤੀ'))
+    }
+    setSaving(false)
+  }
+
+  async function assignAlias(whatsapp_name, profile_id) {
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    await fetch('/api/admin/jaap-aliases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ whatsapp_name, profile_id }),
+    })
+    setMapping(prev => prev ? { ...prev, unmappedNames: prev.unmappedNames.filter(n => n !== whatsapp_name) } : prev)
   }
 
   if (loading) return <LoadingScreen />
@@ -535,6 +319,58 @@ export default function ChatReportPage() {
             <p className="text-xs mb-4" style={{ color: 'rgba(12,36,64,0.38)' }}>
               {weekRange ? `ਹਫ਼ਤਾ: ${fmtDate(weekRange.start)} – ${fmtDate(weekRange.end)}` : ''}
             </p>
+
+            {/* Save to database — persists daily records for the ਜੀਵਨ analytics */}
+            <div className="glass-card-static rounded-2xl p-4 mb-5" style={{ background: 'rgba(14,65,110,0.03)' }}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: '#0c2540' }}>📊 ਡਾਟਾਬੇਸ ਵਿੱਚ ਸੰਭਾਲੋ</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'rgba(12,36,64,0.45)' }}>
+                    ਰੋਜ਼ਾਨਾ ਰਿਕਾਰਡ ਸੰਭਾਲੋ ਤਾਂ ਜੋ ਵਰਤੋਂਕਾਰ ਆਪਣਾ ਜੀਵਨ ਵਿਸ਼ਲੇਸ਼ਣ ਵੇਖ ਸਕਣ
+                  </p>
+                </div>
+                <button onClick={handleSaveToDb} disabled={saving}
+                  className="text-sm px-4 py-2 rounded-xl font-semibold transition-all"
+                  style={{ background: 'rgba(14,65,110,0.1)', border: '1px solid rgba(14,65,110,0.22)', color: '#1a5f8f', opacity: saving ? 0.6 : 1 }}>
+                  {saving ? '⏳ ਸੰਭਾਲ ਰਿਹਾ ਹੈ...' : '💾 ਸੰਭਾਲੋ'}
+                </button>
+              </div>
+              {saveMsg && (
+                <p className="text-xs mt-3" style={{ color: saveMsg.startsWith('✓') ? '#15803d' : '#dc2626' }}>{saveMsg}</p>
+              )}
+
+              {/* Unmapped-name mapping panel */}
+              {mapping && mapping.unmappedNames.length > 0 && (
+                <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(14,65,110,0.1)' }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: '#0c2540' }}>
+                    ਨਵੇਂ ਨਾਮ ਜੋੜੋ — {mapping.unmappedNames.length} ਨਾਮ ਕਿਸੇ ਵਰਤੋਂਕਾਰ ਨਾਲ ਨਹੀਂ ਜੁੜੇ
+                  </p>
+                  <p className="text-xs mb-3" style={{ color: 'rgba(12,36,64,0.45)' }}>
+                    ਇੱਕ ਵਾਰ ਜੋੜਨ ਤੋਂ ਬਾਅਦ ਅਗਲੀ ਵਾਰ ਆਪਣੇ-ਆਪ ਜੁੜ ਜਾਣਗੇ — ਸਿਰਫ਼ ਨਵੇਂ ਨਾਮ ਹੀ ਪੁੱਛੇ ਜਾਣਗੇ
+                  </p>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {mapping.unmappedNames.map(name => (
+                      <div key={name} className="flex items-center gap-2">
+                        <span className="text-xs flex-1 truncate" style={{ color: '#0c2540' }}>{name}</span>
+                        <select
+                          defaultValue=""
+                          onChange={e => e.target.value && assignAlias(name, e.target.value)}
+                          className="text-xs px-2 py-1.5 rounded-lg"
+                          style={{ background: 'white', border: '1px solid rgba(14,65,110,0.2)', color: '#0c2540', maxWidth: 200 }}>
+                          <option value="">— ਵਰਤੋਂਕਾਰ ਚੁਣੋ —</option>
+                          {mapping.users.map(u => (
+                            <option key={u.id} value={u.id}>{u.full_name} (@{u.username})</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {mapping && mapping.unmappedNames.length === 0 && (
+                <p className="text-xs mt-3" style={{ color: '#15803d' }}>✓ ਸਾਰੇ ਨਾਮ ਜੁੜੇ ਹੋਏ ਹਨ</p>
+              )}
+            </div>
 
             {/* Tabs */}
             <div className="flex gap-2 mb-5 overflow-x-auto pb-1">

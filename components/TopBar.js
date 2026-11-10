@@ -121,6 +121,7 @@ export default function TopBar({ profile }) {
         { href: '/topics', label: 'ਵਿਸ਼ੇ', Icon: TopicsIcon },
         { href: '/prashan', label: 'ਪ੍ਰਸ਼ਨ', Icon: QuestionIcon },
         { href: '/jhalak', label: 'ਸਾਂਝ', Icon: JhalakIcon, badge: unread },
+        { href: '/jivan', label: 'ਜੀਵਨ', Icon: JivanIcon },
         { href: '/leaderboard', label: 'ਸਰਵੋਤਮ', Icon: LeaderboardIcon },
       ]
   navLinksRef.current = navLinks
@@ -374,6 +375,15 @@ function QuestionIcon({ active }) {
       <circle cx="12" cy="12" r="10" />
       <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
       <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  )
+}
+
+function JivanIcon({ active }) {
+  const c = active ? '#1a5f8f' : 'rgba(12,36,64,0.4)'
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12h4l2 5 4-14 2 7 1-2h5" />
     </svg>
   )
 }

@@ -365,3 +365,71 @@ CREATE TABLE IF NOT EXISTS public.shabad_kanth (
 ALTER TABLE public.shabad_kanth ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users manage own kanth" ON public.shabad_kanth FOR ALL USING (auth.uid() = user_id);
 GRANT ALL ON public.shabad_kanth TO authenticated;
+
+-- =====================================================
+-- Jaap analytics (ਜੀਵਨ / Jivan tab)
+-- Daily sadhana reports parsed from the weekly WhatsApp "ਜਾਪ" chat export.
+-- The admin uploads the zip on /admin/chat-report; the import writes here.
+-- =====================================================
+
+-- Maps a WhatsApp sender name (saved contact nickname) to an app profile.
+-- A "Chat with X" export has no phone numbers, so the admin assigns each
+-- distinct sender name to a user account once; the mapping is reused on every
+-- later import. Written only via the service-role import/alias routes.
+CREATE TABLE IF NOT EXISTS public.jaap_aliases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  whatsapp_name TEXT UNIQUE NOT NULL,
+  profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.jaap_aliases ENABLE ROW LEVEL SECURITY;
+
+-- Any authenticated user can read aliases (a user resolves their own name);
+-- only admins mutate them (service-role bypasses RLS anyway).
+CREATE POLICY "Anyone can view jaap aliases"
+  ON public.jaap_aliases FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Only admins mutate jaap aliases"
+  ON public.jaap_aliases FOR ALL
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+-- One row per person per day. whatsapp_name is always stored so unmapped data
+-- is never lost; profile_id is resolved from jaap_aliases at import time and
+-- back-filled when an alias is later created. Daily category values; vela times
+-- stored both normalized (minutes since midnight) and raw.
+CREATE TABLE IF NOT EXISTS public.jaap_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  whatsapp_name TEXT NOT NULL,
+  profile_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  report_date DATE NOT NULL,
+  gurmantar   NUMERIC,
+  brahmkavach NUMERIC,
+  birharhe    NUMERIC,
+  japji       NUMERIC,
+  sewa        NUMERIC,
+  sehajpath   NUMERIC,
+  amrit_vela_min   INTEGER,
+  amrit_vela_raw   TEXT,
+  sandhya_vela_min INTEGER,
+  sandhya_vela_raw TEXT,
+  day_index   INTEGER,
+  raw_message TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(whatsapp_name, report_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_jaap_reports_profile_date ON public.jaap_reports (profile_id, report_date);
+CREATE INDEX IF NOT EXISTS idx_jaap_reports_date ON public.jaap_reports (report_date);
+
+ALTER TABLE public.jaap_reports ENABLE ROW LEVEL SECURITY;
+
+-- A user sees only their own rows; admins see everyone. No user write policies
+-- on purpose — only the service-role import route writes this table.
+CREATE POLICY "Users view own jaap reports"
+  ON public.jaap_reports FOR SELECT
+  USING (auth.uid() = profile_id OR public.is_admin());
+
+GRANT SELECT ON public.jaap_aliases TO authenticated;
+GRANT SELECT ON public.jaap_reports TO authenticated;
