@@ -6,11 +6,11 @@ import { useRef, useState, useEffect } from 'react'
 // The viewport height follows the ACTIVE slide so a short slide (e.g. a graph)
 // doesn't inherit empty space from a taller one (e.g. a calendar).
 // slides: [{ key, label, content }]  — first slide is the default view.
-// tabsOnDark / dotsOnDark style the tabs (top) and dots (bottom) light-on-dark,
-// used when those strips sit over a dark part of a gradient card. overlay=true
-// floats the tabs/dots on top of a full-bleed slide (e.g. the sky chart) so the
-// whole card reads as one image. onActiveChange(i) fires on every slide change.
-export default function Carousel({ slides, accent = '#1a5f8f', tabsOnDark = false, dotsOnDark = false, overlay = false, onActiveChange }) {
+// tabsOnDark / dotsOnDark style the tabs (top) and dots (bottom) light-on-dark.
+// tabBg / dotBg paint the tab/dot strips a solid colour (flush with the slide)
+// so a full-bleed gradient slide reads as one continuous image without the
+// controls overlapping its content. onActiveChange(i) fires on every change.
+export default function Carousel({ slides, accent = '#1a5f8f', tabsOnDark = false, dotsOnDark = false, tabBg, dotBg, onActiveChange }) {
   const trackRef = useRef(null)
   const slideRefs = useRef([])
   const [active, setActive] = useState(0)
@@ -54,7 +54,7 @@ export default function Carousel({ slides, accent = '#1a5f8f', tabsOnDark = fals
   }, [active])
 
   const tabs = (
-    <div className={overlay ? 'absolute top-2 left-2 z-10 flex gap-2' : 'flex gap-2 mb-3'}>
+    <div className="flex gap-2" style={{ background: tabBg, padding: tabBg ? '10px 12px 8px' : undefined, marginBottom: tabBg ? 0 : 12 }}>
       {slides.map((s, i) => (
         <button key={s.key} onClick={() => goTo(i)}
           className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
@@ -62,12 +62,10 @@ export default function Carousel({ slides, accent = '#1a5f8f', tabsOnDark = fals
             background: active === i ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)',
             border: `1px solid ${active === i ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.2)'}`,
             color: active === i ? '#fff' : 'rgba(255,255,255,0.75)',
-            backdropFilter: overlay ? 'blur(4px)' : undefined,
           } : {
-            background: active === i ? `${accent}1a` : 'rgba(255,255,255,0.5)',
+            background: active === i ? `${accent}1a` : 'rgba(255,255,255,0.55)',
             border: `1px solid ${active === i ? `${accent}44` : 'rgba(12,36,64,0.12)'}`,
             color: active === i ? (accent === '#ffffff' ? '#0c2540' : accent) : 'rgba(12,36,64,0.6)',
-            backdropFilter: overlay ? 'blur(4px)' : undefined,
           }}>
           {s.label}
         </button>
@@ -76,7 +74,7 @@ export default function Carousel({ slides, accent = '#1a5f8f', tabsOnDark = fals
   )
 
   const dots = slides.length > 1 && (
-    <div className={overlay ? 'absolute bottom-2 left-0 right-0 z-10 flex justify-center gap-1.5' : 'flex justify-center gap-1.5 mt-3'}>
+    <div className="flex justify-center gap-1.5" style={{ background: dotBg, padding: dotBg ? '8px 0 10px' : undefined, marginTop: dotBg ? 0 : 12 }}>
       {slides.map((s, i) => (
         <button key={s.key} onClick={() => goTo(i)} aria-label={s.label}
           style={{
@@ -100,16 +98,6 @@ export default function Carousel({ slides, accent = '#1a5f8f', tabsOnDark = fals
       ))}
     </div>
   )
-
-  if (overlay) {
-    return (
-      <div className="relative">
-        {track}
-        {tabs}
-        {dots}
-      </div>
-    )
-  }
 
   return (
     <div>

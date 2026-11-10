@@ -29,6 +29,15 @@ export default function JaapEntryModal({ token, byDate, defaultDate, onClose, on
 
   const existing = !!byDate[date]
 
+  // Lock background scroll while the modal is open.
+  useEffect(() => {
+    const html = document.documentElement, body = document.body
+    const prevHtml = html.style.overflow, prevBody = body.style.overflow
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    return () => { html.style.overflow = prevHtml; body.style.overflow = prevBody }
+  }, [])
+
   useEffect(() => {
     const row = byDate[date]
     const v = {}
@@ -67,7 +76,7 @@ export default function JaapEntryModal({ token, byDate, defaultDate, onClose, on
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, overscrollBehavior: 'contain' }}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-lg" style={{ color: '#0c2540' }}>ਹਾਜ਼ਰੀ ਜੋੜੋ</h2>
           <button onClick={onClose} aria-label="close" className="text-xl leading-none" style={{ color: 'rgba(12,36,64,0.5)' }}>✕</button>

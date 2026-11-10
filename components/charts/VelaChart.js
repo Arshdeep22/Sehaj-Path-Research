@@ -31,7 +31,7 @@ function fmtClock(min) {
 export default function VelaChart({ points, height = 190, bestLabel = 'ਸਭ ਤੋਂ ਵਧੀਆ', yMin = 0, yMax = 1440, sky = false }) {
   const [hover, setHover] = useState(null)
   const W = 320, H = height
-  const padL = 46, padR = 14, padT = 36, padB = 42
+  const padL = 46, padR = 14, padT = 28, padB = 42
   const plotW = W - padL - padR
   const plotH = H - padT - padB
   const n = points.length

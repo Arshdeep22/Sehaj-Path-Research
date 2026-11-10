@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
-import { getProfileCached } from '../../lib/clientCache'
+import { getProfileCached, getCache, setCache } from '../../lib/clientCache'
 import { CATEGORY_DAILY, getReportWeekRange } from '../../lib/jaapParser'
 import { sunTimes, skyColorAt, isDarkColor } from '../../lib/sky'
 import TopBar from '../../components/TopBar'
@@ -98,29 +98,41 @@ function JivanInner() {
   const [velaActive, setVelaActive] = useState(0)
   const [token, setToken] = useState(null)
   const [showEntry, setShowEntry] = useState(false)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const cacheKeyRef = useRef(null)
 
-  async function reloadAnalytics(tok) {
+  async function reloadAnalytics(tok, key = cacheKeyRef.current) {
     const qs = viewProfileId ? `?profileId=${viewProfileId}` : ''
     const res = await fetch(`/api/jaap/analytics${qs}`, { headers: { Authorization: `Bearer ${tok}` } })
-    setData(await res.json())
+    const json = await res.json()
+    setData(json)
+    if (key && res.ok) setCache(key, json)
+    return json
   }
 
   useEffect(() => {
     async function load() {
-      let tok
+      let tok, pid
       const fast = await getProfileCached()
-      if (fast) { setProfile(fast.profile); tok = fast.token }
+      if (fast) { setProfile(fast.profile); tok = fast.token; pid = fast.profile?.id }
       if (!tok) {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { router.push('/'); return }
         const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
         if (!prof || prof.must_change_password) { router.push('/change-password'); return }
         setProfile(prof)
+        pid = prof.id
         const { data: { session } } = await supabase.auth.getSession()
         tok = session?.access_token
       }
       setToken(tok)
-      await reloadAnalytics(tok)
+
+      // Stale-while-revalidate: show the last-known analytics instantly, then refresh.
+      const key = `jaap:analytics:${viewProfileId || pid}`
+      cacheKeyRef.current = key
+      const cached = getCache(key)
+      if (cached) { setData(cached); setLoading(false) }
+      await reloadAnalytics(tok, key)
       setLoading(false)
     }
     load()
@@ -160,40 +172,55 @@ function JivanInner() {
   const sun = sunTimes(new Date())
   const velaTop = velaActive === 1 ? sandhyaMin : 0
   const velaBot = velaActive === 1 ? sandhyaMax : amritMax
-  const tabsOnDark = isDarkColor(skyColorAt(velaTop, sun))
-  const dotsOnDark = isDarkColor(skyColorAt(velaBot, sun))
+  const velaTopColor = skyColorAt(velaTop, sun)
+  const velaBotColor = skyColorAt(velaBot, sun)
+  const tabsOnDark = isDarkColor(velaTopColor)
+  const dotsOnDark = isDarkColor(velaBotColor)
 
   return (
     <div className="page-body">
       <TopBar profile={profile} />
       <div className="max-w-2xl mx-auto px-4 py-4">
-        {/* Filter (page starts here) */}
-        <div className="flex justify-center items-center gap-2 mb-4 animate-fadeInUp">
-          {FILTERS.map(f => (
-            <button key={f.key} onClick={() => setFilter(f.key)}
-              className="px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-              style={{
-                background: filter === f.key ? 'rgba(14,65,110,0.12)' : 'rgba(255,255,255,0.6)',
-                border: `1px solid ${filter === f.key ? 'rgba(14,65,110,0.28)' : 'rgba(14,65,110,0.1)'}`,
-                color: filter === f.key ? '#0c2540' : 'rgba(12,36,64,0.5)',
-              }}>
-              {f.label}
+        {/* Filter dropdown (left) + add entry (right) in one row */}
+        <div className="flex items-center justify-between gap-2 mb-4 animate-fadeInUp relative" style={{ zIndex: 30 }}>
+          <div className="relative" style={{ zIndex: 50 }}>
+            <button onClick={() => setFilterOpen(o => !o)}
+              className="inline-flex items-center gap-2 pl-4 pr-3 py-2 rounded-xl text-sm font-semibold"
+              style={{ background: 'rgba(255,255,255,0.75)', border: '1px solid rgba(14,65,110,0.18)', color: '#0c2540', boxShadow: '0 2px 8px rgba(14,65,110,0.06)' }}>
+              {FILTERS.find(f => f.key === filter)?.label}
+              <span className="text-xs transition-transform" style={{ color: 'rgba(12,36,64,0.5)', transform: filterOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
             </button>
-          ))}
-          {isAdminView && (
-            <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: 'rgba(14,65,110,0.08)', color: '#1a5f8f' }}>ਐਡਮਿਨ</span>
-          )}
-        </div>
+            {filterOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setFilterOpen(false)} />
+                <div className="absolute left-0 top-full mt-1.5 z-50 rounded-xl overflow-hidden min-w-[150px]"
+                  style={{ background: 'rgba(255,255,255,0.98)', border: '1px solid rgba(14,65,110,0.14)', boxShadow: '0 10px 30px rgba(12,36,64,0.18)', backdropFilter: 'blur(8px)' }}>
+                  {FILTERS.map(f => {
+                    const on = f.key === filter
+                    return (
+                      <button key={f.key} onClick={() => { setFilter(f.key); setFilterOpen(false) }}
+                        className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-left transition-colors"
+                        style={{ background: on ? 'rgba(14,65,110,0.1)' : 'transparent', color: on ? '#0c2540' : 'rgba(12,36,64,0.65)', fontWeight: on ? 700 : 500 }}>
+                        <span className="w-3 text-xs" style={{ color: '#1a5f8f' }}>{on ? '✓' : ''}</span>
+                        {f.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
 
-        {!isAdminView && (
-          <div className="flex justify-center mb-4 animate-fadeInUp">
+          {isAdminView ? (
+            <span className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(14,65,110,0.08)', color: '#1a5f8f' }}>ਐਡਮਿਨ</span>
+          ) : (
             <button onClick={() => setShowEntry(true)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
               style={{ background: 'linear-gradient(135deg, #38bdf8 0%, #2a84c7 100%)', boxShadow: '0 4px 14px rgba(56,189,248,0.35)' }}>
               <span className="text-lg leading-none">＋</span> ਹਾਜ਼ਰੀ ਜੋੜੋ
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {showEntry && (
           <JaapEntryModal
@@ -216,7 +243,7 @@ function JivanInner() {
                 <span className="font-bold text-sm" style={{ color: VELA_HEADER_TEXT }}>🌗 ਵੇਲਾ</span>
                 <span className="text-xs ml-2" style={{ color: VELA_HEADER_TEXT, opacity: 0.75 }}>ਸ਼ੁਰੂ ਕਰਨ ਦਾ ਸਮਾਂ</span>
               </div>
-              <Carousel accent="#ffffff" overlay tabsOnDark={tabsOnDark} dotsOnDark={dotsOnDark} onActiveChange={setVelaActive} slides={[
+              <Carousel accent="#ffffff" tabBg={velaTopColor} dotBg={velaBotColor} tabsOnDark={tabsOnDark} dotsOnDark={dotsOnDark} onActiveChange={setVelaActive} slides={[
                 { key: 'amrit', label: '🌕 ਅੰਮ੍ਰਿਤ ਵੇਲਾ', content: <VelaChart points={amritPoints} yMin={0} yMax={amritMax} sky /> },
                 { key: 'sandhya', label: '🌅 ਸੰਧਿਆ ਵੇਲਾ', content: <VelaChart points={sandhyaPoints} yMin={sandhyaMin} yMax={sandhyaMax} sky /> },
               ]} />
