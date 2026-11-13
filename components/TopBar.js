@@ -302,7 +302,7 @@ export default function TopBar({ profile }) {
               <span className="nav-icon-wrap">
                 <Icon active={active} />
                 {badge > 0 && (
-                  <span className="nav-badge">{badge > 99 ? '99+' : badge}</span>
+                  <span className="nav-badge">{badge}</span>
                 )}
               </span>
               <span className="bottom-nav-label">{label}</span>

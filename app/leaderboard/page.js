@@ -168,7 +168,7 @@ export default function LeaderboardPage() {
                 </div>
                 {(userStats[user.id]?.unread || 0) > 0 && (
                   <span className="lb-unread-badge" title={`${userStats[user.id].unread} ਨਾ-ਪੜ੍ਹੇ ਸ਼ਬਦ`}>
-                    {userStats[user.id].unread > 99 ? '99+' : userStats[user.id].unread}
+                    {userStats[user.id].unread}
                   </span>
                 )}
               </div>
@@ -223,7 +223,7 @@ function PodiumCard({ user, rank, stats, isMe, tall }) {
         </div>
         {(stats?.unread || 0) > 0 && (
           <span className="lb-unread-badge" title={`${stats.unread} ਨਾ-ਪੜ੍ਹੇ ਸ਼ਬਦ`}>
-            {stats.unread > 99 ? '99+' : stats.unread}
+            {stats.unread}
           </span>
         )}
       </div>

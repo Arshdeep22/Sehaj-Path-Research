@@ -4,39 +4,159 @@ import { useRef, useState, useEffect } from 'react';
 export default function VoiceTextarea({ value, onChange, placeholder, rows = 3, required, className = 'textarea-royal', id }) {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
+  // Live interim transcript (what the engine *thinks* you're saying right now).
+  const [interim, setInterim] = useState('');
   const recognitionRef = useRef(null);
+  // Snapshot of the text that was in the box when recording started. Finals
+  // are appended to this so simultaneous typing + speech don't fight each other.
+  const baseTextRef = useRef('');
+  // Finalized speech for this session (everything the engine has committed).
+  const finalTranscriptRef = useRef('');
+  // Idle timer — only stop after a long pause instead of the browser's default ~2s.
+  const idleTimerRef = useRef(null);
+  // When true, onend should not auto-restart (user tapped stop, or we hit idle).
+  const manualStopRef = useRef(false);
+
+  // Allow up to ~10 s of silence before fully stopping. The browser engine
+  // itself ends on much shorter silences, but we auto-restart until this
+  // timer fires, giving users room to think mid-sentence.
+  const IDLE_TIMEOUT_MS = 10000;
 
   useEffect(() => {
     setSupported(typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window));
   }, []);
 
-  function toggleVoice() {
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
+  useEffect(() => {
+    return () => {
+      // Cleanup if the component unmounts mid-session.
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      manualStopRef.current = true;
+      try { recognitionRef.current?.stop(); } catch (_) {}
+    };
+  }, []);
 
+  function clearIdleTimer() {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  }
+
+  function resetIdleTimer() {
+    clearIdleTimer();
+    idleTimerRef.current = setTimeout(() => {
+      // Long silence — stop for real.
+      manualStopRef.current = true;
+      try { recognitionRef.current?.stop(); } catch (_) {}
+    }, IDLE_TIMEOUT_MS);
+  }
+
+  // Build the full text we want to show / commit: base + final + (optional) interim.
+  function buildText(finalText, interimText) {
+    const base = baseTextRef.current || '';
+    const needsSpace = base && !base.endsWith(' ') && !base.endsWith('\n');
+    const prefix = needsSpace ? ' ' : '';
+    const spoken = (finalText + (interimText ? (finalText ? ' ' : '') + interimText : '')).trim();
+    if (!spoken) return base;
+    return base + prefix + spoken;
+  }
+
+  // Emit a change back to the parent using the same event-like shape it expects.
+  function emit(nextValue) {
+    onChange({ target: { value: nextValue } });
+  }
+
+  function startRecognition() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
     const rec = new SR();
     rec.lang = 'pa-IN';
-    rec.continuous = false;
-    rec.interimResults = false;
+    // Continuous keeps the mic open across pauses; interim gives us the
+    // in-progress words so the textarea updates in real time while speaking.
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+
+    baseTextRef.current = value || '';
+    finalTranscriptRef.current = '';
+    setInterim('');
+    manualStopRef.current = false;
 
     rec.onresult = (e) => {
-      const transcript = Array.from(e.results)
-        .map(r => r[0].transcript)
-        .join('');
-      const prefix = value && !value.endsWith(' ') && !value.endsWith('\n') ? ' ' : '';
-      onChange({ target: { value: value + prefix + transcript } });
+      let newInterim = '';
+      // Only process results from this event's resultIndex forward so we
+      // don't double-append previously finalized chunks.
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        const text = res[0]?.transcript || '';
+        if (res.isFinal) {
+          finalTranscriptRef.current = (finalTranscriptRef.current
+            ? finalTranscriptRef.current + ' '
+            : '') + text.trim();
+        } else {
+          newInterim += text;
+        }
+      }
+      setInterim(newInterim);
+      emit(buildText(finalTranscriptRef.current, newInterim));
+      resetIdleTimer();
     };
 
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
+    rec.onspeechstart = () => resetIdleTimer();
+    rec.onaudiostart = () => resetIdleTimer();
+
+    rec.onerror = (e) => {
+      // 'no-speech' / 'aborted' fire during normal pauses — don't kill the session.
+      if (e?.error === 'no-speech' || e?.error === 'aborted') return;
+      manualStopRef.current = true;
+    };
+
+    rec.onend = () => {
+      // If the browser engine ended on its own (short silence) and the user
+      // hasn't explicitly stopped, restart to keep listening.
+      if (!manualStopRef.current) {
+        try {
+          rec.start();
+          return;
+        } catch (_) {
+          // start() can throw if the engine isn't quite ready — fall through.
+        }
+      }
+      clearIdleTimer();
+      setListening(false);
+      // Commit the final-only value (drop any lingering interim text).
+      emit(buildText(finalTranscriptRef.current, ''));
+      setInterim('');
+    };
 
     recognitionRef.current = rec;
-    rec.start();
-    setListening(true);
+    try {
+      rec.start();
+      setListening(true);
+      resetIdleTimer();
+    } catch (_) {
+      // Already started; ignore.
+    }
   }
+
+  function stopRecognition() {
+    manualStopRef.current = true;
+    clearIdleTimer();
+    try { recognitionRef.current?.stop(); } catch (_) {}
+    setListening(false);
+  }
+
+  function toggleVoice() {
+    if (!supported) return;
+    if (listening) stopRecognition();
+    else startRecognition();
+  }
+
+  // While listening we render the live composed value so users see words
+  // appear as they speak. When idle, we show whatever the parent passed in.
+  const displayValue = listening
+    ? buildText(finalTranscriptRef.current, interim)
+    : (value || '');
 
   return (
     <div className="relative">
@@ -44,8 +164,17 @@ export default function VoiceTextarea({ value, onChange, placeholder, rows = 3, 
         id={id}
         className={className}
         placeholder={placeholder}
-        value={value}
-        onChange={onChange}
+        value={displayValue}
+        onChange={(e) => {
+          if (listening) {
+            // User is typing while mic is on — accept their edit as the new
+            // base and reset accumulated speech so we don't fight them.
+            baseTextRef.current = e.target.value;
+            finalTranscriptRef.current = '';
+            setInterim('');
+          }
+          onChange(e);
+        }}
         rows={rows}
         required={required}
         style={{ paddingRight: supported ? '3rem' : undefined }}
