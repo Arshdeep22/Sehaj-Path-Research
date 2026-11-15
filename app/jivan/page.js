@@ -103,11 +103,25 @@ function JivanInner() {
 
   async function reloadAnalytics(tok, key = cacheKeyRef.current) {
     const qs = viewProfileId ? `?profileId=${viewProfileId}` : ''
-    const res = await fetch(`/api/jaap/analytics${qs}`, { headers: { Authorization: `Bearer ${tok}` } })
-    const json = await res.json()
-    setData(json)
-    if (key && res.ok) setCache(key, json)
-    return json
+    const call = t => fetch(`/api/jaap/analytics${qs}`, { headers: { Authorization: `Bearer ${t}` } })
+    try {
+      let res = await call(tok)
+      // Stale token → refresh once and retry before giving up.
+      if (res.status === 401 || res.status === 403) {
+        const { data: { session } } = await supabase.auth.getSession()
+        const fresh = session?.access_token
+        if (fresh && fresh !== tok) { setToken(fresh); res = await call(fresh) }
+      }
+      if (!res.ok) return null                       // keep showing cached data
+      const json = await res.json()
+      if (json && Array.isArray(json.mine)) {         // only commit a well-formed payload
+        setData(json)
+        if (key) setCache(key, json)
+      }
+      return json
+    } catch {
+      return null                                     // network blip → keep cached
+    }
   }
 
   useEffect(() => {
