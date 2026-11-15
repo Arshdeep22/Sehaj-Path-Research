@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
 import { getProfileCached, getCache, setCache } from '../../lib/clientCache'
-import { CATEGORY_DAILY, getReportWeekRange } from '../../lib/jaapParser'
+import { CATEGORY_DAILY, getReportWeekRange, BOOL_FIELDS } from '../../lib/jaapParser'
 import { sunTimes, skyColorAt, isDarkColor } from '../../lib/sky'
 import TopBar from '../../components/TopBar'
 import CalendarHeatmap from '../../components/charts/CalendarHeatmap'
@@ -53,6 +53,12 @@ function dayState(row, cat) {
   if (v >= cat.dailyTarget) return 'done'
   if (v > 0) return 'partial'
   return 'miss'
+}
+
+// Yes/no discipline → calendar state (true=done, false=miss, null=blank).
+function boolState(row, key) {
+  if (!row || row[key] === null || row[key] === undefined) return 'blank'
+  return row[key] ? 'done' : 'miss'
 }
 
 // Dates (YYYY-MM-DD) covered by the active filter, start → today.
@@ -300,6 +306,29 @@ function JivanInner() {
                 </div>
               )
             })}
+
+            {/* Disciplines (yes/no) — one card, 3-page carousel of calendars */}
+            <div className="glass-card-static jivan-card-3d rounded-2xl overflow-hidden mb-3 animate-fadeInUp">
+              <div className="px-3 py-2" style={{ background: '#d9e2ec' }}>
+                <span className="font-bold text-sm" style={{ color: '#334155' }}>✅ ਨਿਯਮ</span>
+              </div>
+              <div className="p-3">
+                <Carousel accent="#1a5f8f" slides={BOOL_FIELDS.map(bf => ({
+                  key: bf.key,
+                  label: `${bf.emoji} ${bf.short || bf.label.split(' ')[0]}`,
+                  content: (
+                    <div className="space-y-5">
+                      <p className="text-xs text-center mb-1" style={{ color: 'rgba(12,36,64,0.6)' }}>{bf.emoji} {bf.label}</p>
+                      {months.map(({ y, m }) => (
+                        <CalendarHeatmap key={`${bf.key}-${y}-${m}`} year={y} month={m}
+                          stateForDate={ds => boolState(byDate[ds], bf.key)}
+                          legendStates={['done', 'miss', 'blank']} />
+                      ))}
+                    </div>
+                  ),
+                }))} />
+              </div>
+            </div>
           </>
         )}
       </div>

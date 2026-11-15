@@ -43,6 +43,9 @@ export async function POST(request) {
       amrit_vela_raw: r.amrit_vela_raw ?? null,
       sandhya_vela_min: r.sandhya_vela_min ?? null,
       sandhya_vela_raw: r.sandhya_vela_raw ?? null,
+      phone_misuse: r.phone_misuse ?? null,
+      no_faults: r.no_faults ?? null,
+      no_complaint: r.no_complaint ?? null,
       day_index: r.day_index ?? null,
       raw_message: r.raw_message ?? null,
     }

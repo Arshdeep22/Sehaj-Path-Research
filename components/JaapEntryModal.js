@@ -1,12 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CATEGORY_DAILY } from '../lib/jaapParser'
+import { CATEGORY_DAILY, BOOL_FIELDS } from '../lib/jaapParser'
 
 // Ordered the same as the Jivan cards.
 const FORM_ORDER = ['gurmantar', 'sewa', 'brahmkavach', 'birharhe', 'japji', 'sehajpath']
 const CATS = FORM_ORDER.map(k => CATEGORY_DAILY.find(c => c.key === k)).filter(Boolean)
-const UNIT = { gurmantar: 'ਗਿਣਤੀ', brahmkavach: 'ਗਿਣਤੀ', birharhe: 'ਗਿਣਤੀ', japji: 'ਵਾਰ', sehajpath: 'ਮਿੰਟ' }
 
 function minToTime(m) {
   if (m == null) return ''
@@ -24,6 +23,7 @@ export default function JaapEntryModal({ token, byDate, defaultDate, onClose, on
   const [vals, setVals] = useState({})
   const [amrit, setAmrit] = useState('')
   const [sandhya, setSandhya] = useState('')
+  const [bools, setBools] = useState({})
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState(null)
 
@@ -45,6 +45,9 @@ export default function JaapEntryModal({ token, byDate, defaultDate, onClose, on
     setVals(v)
     setAmrit(minToTime(row?.amrit_vela_min))
     setSandhya(minToTime(row?.sandhya_vela_min))
+    const b = {}
+    for (const bf of BOOL_FIELDS) b[bf.key] = row && row[bf.key] != null ? row[bf.key] : null
+    setBools(b)
   }, [date, byDate])
 
   const today = new Date().toISOString().slice(0, 10)
@@ -60,6 +63,7 @@ export default function JaapEntryModal({ token, byDate, defaultDate, onClose, on
       const raw = vals[c.key]
       body[c.key] = raw === '' || raw == null ? null : Number(raw)
     }
+    for (const bf of BOOL_FIELDS) body[bf.key] = bools[bf.key] ?? null
     try {
       const res = await fetch('/api/jaap/entry', {
         method: 'POST',
@@ -131,6 +135,28 @@ export default function JaapEntryModal({ token, byDate, defaultDate, onClose, on
               className="w-28 px-3 py-1.5 rounded-lg text-sm"
               style={{ border: '1px solid rgba(14,65,110,0.18)', background: 'rgba(255,255,255,0.7)' }} />
           </div>
+
+          <div className="my-1" style={{ height: 1, background: 'rgba(14,65,110,0.1)' }} />
+          {BOOL_FIELDS.map(bf => (
+            <div key={bf.key} className="flex items-center gap-3">
+              <span className="text-sm flex-1" style={{ color: '#0c2540' }}>{bf.emoji} {bf.label}</span>
+              <div className="flex gap-1">
+                {[[true, 'ਹਾਂ'], [false, 'ਨਹੀਂ']].map(([val, lbl]) => {
+                  const on = bools[bf.key] === val
+                  const yes = val === true
+                  return (
+                    <button key={lbl} onClick={() => setBools(s => ({ ...s, [bf.key]: on ? null : val }))}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                      style={{
+                        background: on ? (yes ? '#15803d' : '#dc2626') : 'rgba(12,36,64,0.05)',
+                        color: on ? '#fff' : 'rgba(12,36,64,0.55)',
+                        border: `1px solid ${on ? (yes ? '#15803d' : '#dc2626') : 'rgba(12,36,64,0.12)'}`,
+                      }}>{lbl}</button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
         {err && <p className="text-sm mt-3" style={{ color: '#dc2626' }}>{err}</p>}

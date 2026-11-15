@@ -414,11 +414,19 @@ CREATE TABLE IF NOT EXISTS public.jaap_reports (
   amrit_vela_raw   TEXT,
   sandhya_vela_min INTEGER,
   sandhya_vela_raw TEXT,
+  phone_misuse BOOLEAN,
+  no_faults    BOOLEAN,
+  no_complaint BOOLEAN,
   day_index   INTEGER,
   raw_message TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(whatsapp_name, report_date)
 );
+
+-- For existing databases: add the discipline (yes/no) columns.
+ALTER TABLE public.jaap_reports ADD COLUMN IF NOT EXISTS phone_misuse BOOLEAN;
+ALTER TABLE public.jaap_reports ADD COLUMN IF NOT EXISTS no_faults    BOOLEAN;
+ALTER TABLE public.jaap_reports ADD COLUMN IF NOT EXISTS no_complaint BOOLEAN;
 
 CREATE INDEX IF NOT EXISTS idx_jaap_reports_profile_date ON public.jaap_reports (profile_id, report_date);
 CREATE INDEX IF NOT EXISTS idx_jaap_reports_date ON public.jaap_reports (report_date);

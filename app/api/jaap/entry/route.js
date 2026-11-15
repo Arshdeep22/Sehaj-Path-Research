@@ -26,6 +26,9 @@ function vela(v) {
   const n = Number(v)
   return Number.isInteger(n) && n >= 0 && n < 1440 ? n : null
 }
+function bool(v) {
+  return v === true ? true : v === false ? false : null
+}
 
 // POST: a user adds/edits their OWN jaap entry for one day. Upserts on
 // (whatsapp_name, report_date); the name is the user's mapped alias if any, else
@@ -53,6 +56,9 @@ export async function POST(request) {
     amrit_vela_raw: body.amrit_vela_raw || null,
     sandhya_vela_min: vela(body.sandhya_vela_min),
     sandhya_vela_raw: body.sandhya_vela_raw || null,
+    phone_misuse: bool(body.phone_misuse),
+    no_faults: bool(body.no_faults),
+    no_complaint: bool(body.no_complaint),
     raw_message: '[app entry]',
   }
   for (const k of CAT_KEYS) row[k] = num(body[k])
