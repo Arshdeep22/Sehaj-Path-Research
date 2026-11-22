@@ -16,7 +16,12 @@ async function getAdminCaller(request) {
   return profile?.role === 'admin' ? user : null
 }
 
-const CAT_KEYS = ['gurmantar', 'brahmkavach', 'birharhe', 'japji', 'sewa', 'sehajpath']
+// New hour-based categories (Nov 2026). Keep in sync with lib/jaapParser.js.
+const CAT_KEYS = [
+  'gurmantar_tikaa', 'gurmantar_turde', 'gurbani', 'vichar',
+  'japji', 'brahmkavach', 'birharhe', 'sewa', 'sehajpath', 'neend',
+]
+const BOOL_KEYS = ['eye_bibek', 'no_faults', 'no_complaint']
 
 // POST: bulk-upsert parsed daily records. Body: { records: [...] }
 export async function POST(request) {
@@ -43,13 +48,11 @@ export async function POST(request) {
       amrit_vela_raw: r.amrit_vela_raw ?? null,
       sandhya_vela_min: r.sandhya_vela_min ?? null,
       sandhya_vela_raw: r.sandhya_vela_raw ?? null,
-      phone_misuse: r.phone_misuse ?? null,
-      no_faults: r.no_faults ?? null,
-      no_complaint: r.no_complaint ?? null,
       day_index: r.day_index ?? null,
       raw_message: r.raw_message ?? null,
     }
     for (const k of CAT_KEYS) row[k] = r[k] ?? null
+    for (const k of BOOL_KEYS) row[k] = r[k] ?? null
     return row
   })
 
@@ -58,7 +61,7 @@ export async function POST(request) {
     .upsert(rows, { onConflict: 'whatsapp_name,report_date' })
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  // Retain only the current + previous calendar month.
+  // Retain only the current + previous calendar month (keeps the table small).
   const cutoff = new Date()
   cutoff.setDate(1)
   cutoff.setMonth(cutoff.getMonth() - 1)
@@ -66,7 +69,7 @@ export async function POST(request) {
   await admin.from('jaap_reports').delete().lt('report_date', cutoffStr)
 
   // Names that still have no mapping (so the UI can prompt the admin) vs. names
-  // auto-resolved from previously-saved aliases (so the UI can show it worked).
+  // auto-resolved from previously-saved aliases.
   const unmappedNames = [...new Set(rows.filter(r => !r.profile_id).map(r => r.whatsapp_name))]
   const autoMappedCount = new Set(rows.filter(r => r.profile_id).map(r => r.whatsapp_name)).size
 

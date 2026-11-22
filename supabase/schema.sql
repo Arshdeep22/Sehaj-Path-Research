@@ -224,7 +224,6 @@ CREATE POLICY "Only admins can view weekly leaderboard"
 
 -- =====================================================
 -- Shabad favourites (per-user saved shabads for the ਮਨਪਸੰਦ list)
--- Mirrors shabad_views: one row per (shabad, user). No score is awarded.
 -- =====================================================
 CREATE TABLE IF NOT EXISTS public.shabad_favourites (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -252,8 +251,6 @@ CREATE POLICY "Users can remove their own favourites"
 
 -- =====================================================
 -- Prasang (personal / admin-shared scripture study containers)
--- Structure mirrors topics → angles → shabads but with per-user privacy:
--- users only see their own prasang_angles and prasang_shabads.
 -- =====================================================
 CREATE TABLE IF NOT EXISTS public.prasangs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -285,53 +282,41 @@ ALTER TABLE public.prasangs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prasang_angles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prasang_shabads ENABLE ROW LEVEL SECURITY;
 
--- Prasangs: anyone authenticated can read (to see admin-created ones); write = own or admin
 CREATE POLICY "All authenticated users can view prasangs"
   ON public.prasangs FOR SELECT
   USING (auth.uid() IS NOT NULL);
-
 CREATE POLICY "Authenticated users can create prasangs"
   ON public.prasangs FOR INSERT
   WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = created_by);
-
 CREATE POLICY "Users can update their own prasangs, admins can update all"
   ON public.prasangs FOR UPDATE
   USING (auth.uid() = created_by OR public.is_admin());
-
 CREATE POLICY "Users can delete their own prasangs, admins can delete all"
   ON public.prasangs FOR DELETE
   USING (auth.uid() = created_by OR public.is_admin());
 
--- Prasang angles: own rows + admins
 CREATE POLICY "Users can view their own prasang angles, admins see all"
   ON public.prasang_angles FOR SELECT
   USING (auth.uid() = created_by OR public.is_admin());
-
 CREATE POLICY "Authenticated users can create prasang angles"
   ON public.prasang_angles FOR INSERT
   WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = created_by);
-
 CREATE POLICY "Users can update their own prasang angles, admins can update all"
   ON public.prasang_angles FOR UPDATE
   USING (auth.uid() = created_by OR public.is_admin());
-
 CREATE POLICY "Users can delete their own prasang angles, admins can delete all"
   ON public.prasang_angles FOR DELETE
   USING (auth.uid() = created_by OR public.is_admin());
 
--- Prasang shabads: own rows + admins
 CREATE POLICY "Users can view their own prasang shabads, admins see all"
   ON public.prasang_shabads FOR SELECT
   USING (auth.uid() = created_by OR public.is_admin());
-
 CREATE POLICY "Authenticated users can create prasang shabads"
   ON public.prasang_shabads FOR INSERT
   WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = created_by);
-
 CREATE POLICY "Users can update their own prasang shabads, admins can update all"
   ON public.prasang_shabads FOR UPDATE
   USING (auth.uid() = created_by OR public.is_admin());
-
 CREATE POLICY "Users can delete their own prasang shabads, admins can delete all"
   ON public.prasang_shabads FOR DELETE
   USING (auth.uid() = created_by OR public.is_admin());
@@ -368,14 +353,16 @@ GRANT ALL ON public.shabad_kanth TO authenticated;
 
 -- =====================================================
 -- Jaap analytics (ਜੀਵਨ / Jivan tab)
--- Daily sadhana reports parsed from the weekly WhatsApp "ਜਾਪ" chat export.
--- The admin uploads the zip on /admin/chat-report; the import writes here.
+--
+-- NOV 2026: The daily WhatsApp "ਜਾਪ" report format changed from counts to HOURS
+-- (and split gurmantar into tikaa-ke / turde-firde). The old schema's per-day
+-- columns (gurmantar, brahmkavach, birharhe, japji, sewa, sehajpath counts) are
+-- replaced with the new hour-based schema below. Old rows are purged — only the
+-- jaap_aliases mapping (whatsapp_name → profile_id) is preserved, so admins
+-- don't have to re-map every user on the first import.
 -- =====================================================
 
--- Maps a WhatsApp sender name (saved contact nickname) to an app profile.
--- A "Chat with X" export has no phone numbers, so the admin assigns each
--- distinct sender name to a user account once; the mapping is reused on every
--- later import. Written only via the service-role import/alias routes.
+-- Alias map (preserved across the schema change — reuses old rows).
 CREATE TABLE IF NOT EXISTS public.jaap_aliases (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   whatsapp_name TEXT UNIQUE NOT NULL,
@@ -384,9 +371,8 @@ CREATE TABLE IF NOT EXISTS public.jaap_aliases (
 );
 
 ALTER TABLE public.jaap_aliases ENABLE ROW LEVEL SECURITY;
-
--- Any authenticated user can read aliases (a user resolves their own name);
--- only admins mutate them (service-role bypasses RLS anyway).
+DROP POLICY IF EXISTS "Anyone can view jaap aliases" ON public.jaap_aliases;
+DROP POLICY IF EXISTS "Only admins mutate jaap aliases" ON public.jaap_aliases;
 CREATE POLICY "Anyone can view jaap aliases"
   ON public.jaap_aliases FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -395,46 +381,49 @@ CREATE POLICY "Only admins mutate jaap aliases"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
--- One row per person per day. whatsapp_name is always stored so unmapped data
--- is never lost; profile_id is resolved from jaap_aliases at import time and
--- back-filled when an alias is later created. Daily category values; vela times
--- stored both normalized (minutes since midnight) and raw.
-CREATE TABLE IF NOT EXISTS public.jaap_reports (
+-- Drop the old jaap_reports table (counts-based) and recreate with the new
+-- hour-based columns. This is destructive on purpose — the old data isn't
+-- comparable to the new schema (different units, different categories).
+DROP TABLE IF EXISTS public.jaap_reports CASCADE;
+
+CREATE TABLE public.jaap_reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   whatsapp_name TEXT NOT NULL,
   profile_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   report_date DATE NOT NULL,
-  gurmantar   NUMERIC,
-  brahmkavach NUMERIC,
-  birharhe    NUMERIC,
-  japji       NUMERIC,
-  sewa        NUMERIC,
-  sehajpath   NUMERIC,
+  -- Hour-based categories (NUMERIC; hours as decimal, e.g. 1.5 = 1h30m)
+  gurmantar_tikaa NUMERIC,     -- ਗੁਰਮੰਤ੍ਰ ਟਿਕਾ ਕੇ (hours, weekly target 7)
+  gurmantar_turde NUMERIC,     -- ਗੁਰਮੰਤ੍ਰ ਤੁਰਦੇ ਫਿਰਦੇ (hours, weekly target 28)
+  gurbani         NUMERIC,     -- ਗੁਰਬਾਣੀ (hours, weekly target 15)
+  vichar          NUMERIC,     -- ਵਿਚਾਰ (hours, weekly target 2)
+  -- Count/day-based categories
+  japji           NUMERIC,     -- ਉਠਦਿਆ ਜਪਜੀ ਸਾਹਿਬ (count of days)
+  brahmkavach     NUMERIC,     -- ਬ੍ਰਹਮ ਕਵਚ (count)
+  birharhe        NUMERIC,     -- ਬਿਰਹੜੇ (count)
+  sewa            NUMERIC,     -- ਹੱਥੀ ਸੇਵਾ (days, weekly target 2)
+  sehajpath       NUMERIC,     -- ਸਹਿਜ ਪਾਠ (minutes, weekly target 7)
+  neend           NUMERIC,     -- ਨੀਂਦ (hours slept)
+  -- Vela times (minutes since midnight + raw text)
   amrit_vela_min   INTEGER,
   amrit_vela_raw   TEXT,
   sandhya_vela_min INTEGER,
   sandhya_vela_raw TEXT,
-  phone_misuse BOOLEAN,
-  no_faults    BOOLEAN,
-  no_complaint BOOLEAN,
+  -- Yes/no disciplines
+  eye_bibek    BOOLEAN,         -- ਅੱਖਾਂ ਦਾ ਬਿਬੇਕ
+  no_faults    BOOLEAN,         -- ਅਵਗੁਣ ਨਹੀਂ ਚਿਤਾਰਨੇ
+  no_complaint BOOLEAN,         -- ਸ਼ਿਕਾਇਤ ਨਹੀ ਕਰਨੀ
+  -- Meta
   day_index   INTEGER,
   raw_message TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(whatsapp_name, report_date)
 );
 
--- For existing databases: add the discipline (yes/no) columns.
-ALTER TABLE public.jaap_reports ADD COLUMN IF NOT EXISTS phone_misuse BOOLEAN;
-ALTER TABLE public.jaap_reports ADD COLUMN IF NOT EXISTS no_faults    BOOLEAN;
-ALTER TABLE public.jaap_reports ADD COLUMN IF NOT EXISTS no_complaint BOOLEAN;
-
 CREATE INDEX IF NOT EXISTS idx_jaap_reports_profile_date ON public.jaap_reports (profile_id, report_date);
 CREATE INDEX IF NOT EXISTS idx_jaap_reports_date ON public.jaap_reports (report_date);
 
 ALTER TABLE public.jaap_reports ENABLE ROW LEVEL SECURITY;
 
--- A user sees only their own rows; admins see everyone. No user write policies
--- on purpose — only the service-role import route writes this table.
 CREATE POLICY "Users view own jaap reports"
   ON public.jaap_reports FOR SELECT
   USING (auth.uid() = profile_id OR public.is_admin());

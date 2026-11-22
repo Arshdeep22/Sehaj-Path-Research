@@ -13,18 +13,27 @@ import VelaChart from '../../components/charts/VelaChart'
 import Carousel from '../../components/charts/Carousel'
 import JaapEntryModal from '../../components/JaapEntryModal'
 
-// Card display order (ਹੱਥੀ ਸੇਵਾ right after ਗੁਰਮੰਤਰ).
-const CARD_ORDER = ['gurmantar', 'sewa', 'brahmkavach', 'birharhe', 'japji', 'sehajpath']
+// Card display order (ਹੱਥੀ ਸੇਵਾ right after ਗੁਰਮੰਤ੍ਰ). The new hour-based format
+// splits gurmantar into two separate categories (ਟਿਕਾ ਕੇ / ਤੁਰਦੇ ਫਿਰਦੇ) and
+// adds ਨੀਂਦ (sleep hours).
+const CARD_ORDER = [
+  'gurmantar_tikaa', 'gurmantar_turde', 'gurbani', 'vichar',
+  'sewa', 'brahmkavach', 'birharhe', 'japji', 'sehajpath', 'neend',
+]
 const ORDERED_CATS = CARD_ORDER.map(k => CATEGORY_DAILY.find(c => c.key === k)).filter(Boolean)
 
 // Pastel header backgrounds with a matching deeper text tone per category.
 const CAT_COLOR = {
-  gurmantar:   { bg: '#f3dcb4', text: '#8a4b0a' },
-  brahmkavach: { bg: '#cdd9f6', text: '#1e40af' },
-  birharhe:    { bg: '#f6cedd', text: '#9d174d' },
-  japji:       { bg: '#ddd1f4', text: '#5b21b6' },
-  sewa:        { bg: '#c9e7d4', text: '#166534' },
-  sehajpath:   { bg: '#c6e3ea', text: '#155e75' },
+  gurmantar_tikaa: { bg: '#f3dcb4', text: '#8a4b0a' },
+  gurmantar_turde: { bg: '#fde0b2', text: '#9a5a0a' },
+  gurbani:         { bg: '#c6e3ea', text: '#155e75' },
+  vichar:          { bg: '#fcd9b6', text: '#92400e' },
+  brahmkavach:     { bg: '#cdd9f6', text: '#1e40af' },
+  birharhe:        { bg: '#f6cedd', text: '#9d174d' },
+  japji:           { bg: '#ddd1f4', text: '#5b21b6' },
+  sewa:            { bg: '#c9e7d4', text: '#166534' },
+  sehajpath:       { bg: '#d4e8c9', text: '#365314' },
+  neend:           { bg: '#e2e8f0', text: '#334155' },
 }
 
 // A distinctive pastel header for the vela card, kept the same on both slides.
@@ -48,8 +57,11 @@ function dayState(row, cat) {
   if (!row) return 'blank'
   const v = row[cat.key]
   if (v === null || v === undefined) return 'blank'
-  // ਹੱਥੀ ਸੇਵਾ is a yes/no task — no "ਘੱਟ" (partial) state.
-  if (cat.key === 'sewa') return v > 0 ? 'done' : 'miss'
+  // ਹੱਥੀ ਸੇਵਾ / ਜਪਜੀ are yes/no tasks — no "ਘੱਟ" (partial) state.
+  if (cat.key === 'sewa' || cat.key === 'japji') return v > 0 ? 'done' : 'miss'
+  // Categories with no weekly target (brahmkavach, birharhe, neend): just
+  // mark done if any value, blank if zero.
+  if (!cat.dailyTarget) return v > 0 ? 'done' : 'miss'
   if (v >= cat.dailyTarget) return 'done'
   if (v > 0) return 'partial'
   return 'miss'
@@ -271,8 +283,9 @@ function JivanInner() {
 
             {/* Per-category cards */}
             {ORDERED_CATS.map(cat => {
-              const color = CAT_COLOR[cat.key]
-              const calendarOnly = cat.key === 'japji' || cat.key === 'sewa'
+              const color = CAT_COLOR[cat.key] || { bg: '#e5e7eb', text: '#374151' }
+              // Day-count categories render only as a calendar (no line chart).
+              const calendarOnly = cat.key === 'sewa' || cat.key === 'japji'
               const linePoints = range.map(ds => ({
                 label: shortLabel(ds),
                 you: byDate[ds]?.[cat.key] ?? null,
@@ -283,7 +296,7 @@ function JivanInner() {
                 <div className="space-y-5">
                   {months.map(({ y, m }) => (
                     <CalendarHeatmap key={`${y}-${m}`} year={y} month={m} stateForDate={ds => dayState(byDate[ds], cat)}
-                      legendStates={cat.key === 'sewa' ? ['done', 'miss', 'blank'] : undefined} />
+                      legendStates={calendarOnly ? ['done', 'miss', 'blank'] : undefined} />
                   ))}
                 </div>
               )

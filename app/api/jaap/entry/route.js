@@ -14,7 +14,12 @@ async function getCaller(request) {
   return user || null
 }
 
-const CAT_KEYS = ['gurmantar', 'brahmkavach', 'birharhe', 'japji', 'sewa', 'sehajpath']
+// New hour-based categories (Nov 2026). Keep in sync with lib/jaapParser.js.
+const CAT_KEYS = [
+  'gurmantar_tikaa', 'gurmantar_turde', 'gurbani', 'vichar',
+  'japji', 'brahmkavach', 'birharhe', 'sewa', 'sehajpath', 'neend',
+]
+const BOOL_KEYS = ['eye_bibek', 'no_faults', 'no_complaint']
 
 function num(v) {
   if (v === null || v === undefined || v === '') return null
@@ -56,12 +61,10 @@ export async function POST(request) {
     amrit_vela_raw: body.amrit_vela_raw || null,
     sandhya_vela_min: vela(body.sandhya_vela_min),
     sandhya_vela_raw: body.sandhya_vela_raw || null,
-    phone_misuse: bool(body.phone_misuse),
-    no_faults: bool(body.no_faults),
-    no_complaint: bool(body.no_complaint),
     raw_message: '[app entry]',
   }
   for (const k of CAT_KEYS) row[k] = num(body[k])
+  for (const k of BOOL_KEYS) row[k] = bool(body[k])
 
   const { error } = await admin.from('jaap_reports').upsert(row, { onConflict: 'whatsapp_name,report_date' })
   if (error) return Response.json({ error: error.message }, { status: 500 })

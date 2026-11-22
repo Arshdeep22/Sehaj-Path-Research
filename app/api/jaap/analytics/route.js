@@ -16,7 +16,11 @@ async function getCaller(request) {
   return profile || null
 }
 
-const CAT_KEYS = ['gurmantar', 'brahmkavach', 'birharhe', 'japji', 'sewa', 'sehajpath']
+// New hour-based categories (Nov 2026). Keep in sync with lib/jaapParser.js.
+const CAT_KEYS = [
+  'gurmantar_tikaa', 'gurmantar_turde', 'gurbani', 'vichar',
+  'japji', 'brahmkavach', 'birharhe', 'sewa', 'sehajpath', 'neend',
+]
 
 // GET: analytics for the last ~2 months.
 //   ?profileId=  — admins may view anyone; non-admins are forced to their own id.
@@ -44,8 +48,7 @@ export async function GET(request) {
 
   // Per-date per-category max across everyone (the "top performer" line).
   const dailyMax = {}
-  // Per-date best vela among OTHER people. "Best" = closest to 12am (midnight),
-  // i.e. the smallest minutes-since-midnight value. Used for the golden line.
+  // Per-date best vela among OTHER people — closest to 12am (midnight).
   const velaBest = {}
   for (const row of all || []) {
     const d = row.report_date

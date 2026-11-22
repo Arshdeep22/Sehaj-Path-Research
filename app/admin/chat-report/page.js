@@ -7,86 +7,112 @@ import TopBar from '../../../components/TopBar'
 import JSZip from 'jszip'
 import {
   CATEGORIES,
+  BOOL_FIELDS,
   fmtDate,
   truncateName,
   parseWhatsAppChat,
   getReportWeekRange,
-  getLatestReport,
   buildDailyRecords,
+  extractWeeklyTotals,
 } from '../../../lib/jaapParser'
 
-// Build full report array from raw messages
-function buildReport(messages, memberNames = [], removedNames = new Set()) {
-  // Use the latest message timestamp to anchor the week range (avoids system clock/year mismatch)
-  let latestTs = null
-  for (const msg of messages) {
-    if (msg.timestamp && (!latestTs || msg.timestamp > latestTs)) latestTs = msg.timestamp
-  }
-  const { start, end } = getReportWeekRange(latestTs || new Date())
+// Pass rules (admin, 15 Nov 2026): 7h gurmantar tikaa + 28h turde, 15h gurbani,
+// 2h vichar, 7 min sehajpath, 2 days sewa, and ≥1 day each of the three
+// disciplines. Computed from a totals object (see extractWeeklyTotals).
+const PASS_REQUIRED = [
+  { key: 'gurmantar_tikaa', target: 7 },
+  { key: 'gurmantar_turde', target: 28 },
+  { key: 'gurbani', target: 15 },
+  { key: 'vichar', target: 2 },
+  { key: 'sehajpath', target: 7 },
+  { key: 'sewa', target: 2 },
+]
 
-  // Collect ALL senders in order of first appearance, excluding removed members
-  const allSenders = []
-  const seenSenders = new Set()
-  for (const msg of messages) {
-    if (msg.sender !== 'You' && !seenSenders.has(msg.sender) && !removedNames.has(msg.sender)) {
-      seenSenders.add(msg.sender)
-      allSenders.push(msg.sender)
-    }
-  }
-  // Add current members extracted from events who never sent a message
-  for (const name of memberNames) {
-    if (!seenSenders.has(name)) {
-      seenSenders.add(name)
-      allSenders.push(name)
-    }
-  }
-
-  // Group last-week messages by sender (messages with no timestamp are always included)
-  const weekMsgs = {}
-  for (const msg of messages) {
-    if (msg.sender === 'You') continue
-    const inRange = !msg.timestamp || (msg.timestamp >= start && msg.timestamp <= end)
-    if (inRange) {
-      if (!weekMsgs[msg.sender]) weekMsgs[msg.sender] = []
-      weekMsgs[msg.sender].push(msg.text)
-    }
-  }
-
-  const users = allSenders.map(name => {
-    const texts = weekMsgs[name] || []
-    const values = getLatestReport(texts) || {}
-    const hasReport = Object.keys(values).length > 0
-
-    const catResults = {}
-    for (const cat of CATEGORIES) {
-      const value = values[cat.key] ?? null
-      catResults[cat.key] = { value, target: cat.weeklyTarget, passed: value !== null && value >= cat.weeklyTarget }
-    }
-
-    let finalStatus = 'fail'
-    let failReason = ''
-
-    if (!hasReport) {
-      failReason = 'ਕੋਈ ਰਿਪੋਰਟ ਸੁਨੇਹਾ ਨਹੀਂ ਮਿਲਿਆ'
-    } else if (!catResults.gurmantar.passed) {
-      failReason = 'ਗੁਰਮੰਤਰ ਟੀਚਾ ਪੂਰਾ ਨਹੀਂ ਹੋਇਆ'
-    } else if (!catResults.sehajpath.passed) {
-      failReason = 'ਸਹਿਜ ਪਾਠ ਟੀਚਾ ਪੂਰਾ ਨਹੀਂ ਹੋਇਆ'
-    } else {
-      const otherPassed = CATEGORIES.filter(c => c.key !== 'gurmantar' && c.key !== 'sehajpath' && catResults[c.key].passed)
-      if (otherPassed.length >= 2) {
-        finalStatus = 'pass'
-      } else {
-        failReason = `ਗੁਰਮੰਤਰ ਅਤੇ ਸਹਿਜ ਪਾਠ ਪਾਸ, ਪਰ ਸਿਰਫ਼ ${otherPassed.length} ਹੋਰ ਖੇਤਰ ਪਾਸ (੨ ਚਾਹੀਦੇ)`
-      }
-    }
-
-    return { name, hasReport, values, catResults, finalStatus, failReason }
-  })
-
-  return { users, weekStart: start, weekEnd: end }
+function weeklyPass(totals, boolDays) {
+  const checks = PASS_REQUIRED.map(r => ({
+    key: r.key,
+    target: r.target,
+    value: totals[r.key] || 0,
+    passed: (totals[r.key] || 0) >= r.target - 1e-9,
+  }))
+  const disciplinePass = (boolDays.eye_bibek >= 1) && (boolDays.no_faults >= 1) && (boolDays.no_complaint >= 1)
+  return { checks, disciplinePass, passed: checks.every(c => c.passed) && disciplinePass }
 }
 
+// Build per-user weekly summary from the imported records (for the report-card
+// table + the downloadable image). Groups by whatsapp_name.
+//
+// Note: the caller already filtered the MESSAGES to the Sunday→Sunday grace
+// window before parsing (see handleFile → inWindowMsgs), so every record we
+// receive here is in-week. We don't re-filter by report_date here because
+// Day‑7 messages posted on Sunday morning get a report_date of that Sunday
+// (outside the Sun→Sat week dates) even though they belong to the week being
+// graded — filtering by date would wrongly drop them.
+function buildReportCard(records, memberNames = [], removedNames = new Set(), weekStart, weekEnd) {
+  const byName = new Map()        // name → rows[]
+  for (const r of records) {
+    if (!byName.has(r.whatsapp_name)) byName.set(r.whatsapp_name, [])
+    byName.get(r.whatsapp_name).push(r)
+  }
+  // Also include people who never posted (so the admin sees who's missing).
+  for (const name of memberNames) {
+    if (removedNames.has(name)) continue
+    if (!byName.has(name)) byName.set(name, [])
+  }
+
+  const users = []
+  for (const [name, rows] of byName) {
+    if (removedNames.has(name)) continue
+    // Weekly totals come from the max "/WEEK" (cumulative) field across this
+    // sender's messages (handles both the admin's running-total model and the
+    // occasional zero-reset mistake). Hour categories are sanity-capped so
+    // "30/30" (meaning 30 min) doesn't inflate to 30 hours. See
+    // extractWeeklyTotals in lib/jaapParser.js.
+    const { totals } = extractWeeklyTotals(rows)
+
+    // Discipline day-counts are always the direct sum (no "/WEEK" equivalent).
+    const boolDays = { eye_bibek: 0, no_faults: 0, no_complaint: 0 }
+    for (const r of rows) {
+      for (const k of Object.keys(boolDays)) if (r[k] === true) boolDays[k]++
+    }
+    const pass = weeklyPass(totals, boolDays)
+
+    // All per-day averages divide by 7 for consistency. The parser already
+    // handled ਨੀਂਦ specially (totals.neend = avgNightPosted * 7) so dividing by
+    // 7 here yields the average nightly sleep across posted days.
+    const daysReported = rows.length
+    const avg = {
+      gurmantar: ((totals.gurmantar_tikaa || 0) + (totals.gurmantar_turde || 0)) / 7,
+      gurmantar_tikaa: (totals.gurmantar_tikaa || 0) / 7,
+      gurmantar_turde: (totals.gurmantar_turde || 0) / 7,
+      gurbani: (totals.gurbani || 0) / 7,
+      vichar: (totals.vichar || 0) / 7,
+      neend: (totals.neend || 0) / 7,
+    }
+    // Time given to Maharaj per day = sum of the hour categories / 7 days.
+    const avgHoursPerDay =
+      ((totals.gurmantar_tikaa || 0) + (totals.gurmantar_turde || 0) +
+       (totals.gurbani || 0) + (totals.vichar || 0)) / 7
+    const pctOfDay = (avgHoursPerDay / 24) * 100
+    const weekly = { totals, boolDays, ...pass }
+    users.push({
+      name, rows, weekly,
+      avg,
+      avgHoursPerDay,
+      pctOfDay,
+      daysReported,
+      hasReport: rows.length > 0,
+    })
+  }
+  // Admin wants image sorted by name.
+  users.sort((a, b) => truncateName(a.name).localeCompare(truncateName(b.name)))
+  return users
+}
+
+function toDateStr(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 // ── Page component ────────────────────────────────────────────────────────────
 
@@ -102,7 +128,11 @@ export default function ChatReportPage() {
   const [chatData, setChatData] = useState(null)        // { messages, removedNames } kept for DB import
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
-  const [mapping, setMapping] = useState(null)          // { unmappedNames, users } after import
+  const [mapping, setMapping] = useState(null)
+  // Set of whatsapp_names the admin has unchecked — they'll be omitted from
+  // the downloadable PNG (but still shown in the on-page table, dimmed, so
+  // the admin can still see their stats).
+  const [excluded, setExcluded] = useState(() => new Set())
   const fileRef = useRef(null)
 
   useEffect(() => {
@@ -132,7 +162,6 @@ export default function ChatReportPage() {
           f => !zip.files[f].dir && (f.endsWith('.txt') || f.endsWith('.md')) && !f.includes('__MACOSX')
         )
         if (!allFiles.length) throw new Error('Zip ਵਿੱਚ ਕੋਈ .txt / .md ਫ਼ਾਈਲ ਨਹੀਂ ਮਿਲੀ')
-        // Prefer .txt files; within each type prefer files named "chat"
         const txtFiles = allFiles.filter(f => f.endsWith('.txt'))
         const candidates = txtFiles.length ? txtFiles : allFiles
         const chatFile = candidates.find(f => f.toLowerCase().includes('chat')) || candidates[0]
@@ -146,12 +175,41 @@ export default function ChatReportPage() {
       const { messages, memberNames, removedNames } = parseWhatsAppChat(chatText)
       if (!messages.length) throw new Error('ਕੋਈ ਸੁਨੇਹੇ ਨਹੀਂ ਮਿਲੇ। ਫ਼ਾਈਲ ਦਾ ਫ਼ਾਰਮੈਟ ਜਾਂਚੋ।')
 
-      const { users, weekStart, weekEnd } = buildReport(messages, memberNames, removedNames)
+      // Anchor the reporting week to the latest message. The "week" is a
+      // Mon-Sun calendar slice with a GRACE DEADLINE at the following Sunday
+      // 6 PM — messages posted up to that moment count for the week that just
+      // ended; anything later is a message for the NEW week, so we'd shift
+      // the window forward. getReportWeekRange() already encodes this (end =
+      // next Sunday 18:00), so we just pick the window whose grace end is the
+      // first one that comes AT or AFTER the latest message.
+      let latestTs = null
+      for (const msg of messages) {
+        if (msg.timestamp && (!latestTs || msg.timestamp > latestTs)) latestTs = msg.timestamp
+      }
+      const refDate = latestTs || new Date()
+      const { start, end: graceEnd } = getReportWeekRange(refDate)
+      const weekEnd = new Date(start); weekEnd.setDate(weekEnd.getDate() + 6)
+
+      // Only consider messages whose timestamp is at or before the Sunday 6 PM
+      // grace cutoff. Messages after that moment belong to a later week and
+      // should not inflate this week's totals. Also exclude anything posted
+      // BEFORE this week started (previous weeks' messages).
+      const inWindowMsgs = messages.filter(m => {
+        if (!m.timestamp) return true     // no timestamp → keep (catch-all for weird formats)
+        return m.timestamp >= start && m.timestamp <= graceEnd
+      })
+
+      // Build per-day records (new hour-based format, Nov 15+ only).
+      const records = buildDailyRecords(inWindowMsgs, removedNames)
+
+      const users = buildReportCard(records, memberNames, removedNames, start, weekEnd)
+
       setReport(users)
-      setChatData({ messages, removedNames })
+      setChatData({ messages, removedNames, records })
       setSaveMsg('')
       setMapping(null)
-      setWeekRange({ start: weekStart, end: weekEnd })
+      setExcluded(new Set())    // fresh upload → everyone included again
+      setWeekRange({ start, end: weekEnd })
       setActiveTab('report')
     } catch (err) {
       setError(err.message || 'ਫ਼ਾਈਲ ਪੜ੍ਹਨ ਵਿੱਚ ਗਲਤੀ')
@@ -160,14 +218,12 @@ export default function ChatReportPage() {
     setProcessing(false)
   }
 
-  // Build daily records from the whole chat and persist them, then surface any
-  // WhatsApp names that still need mapping to an app user.
   async function handleSaveToDb() {
     if (!chatData) return
     setSaving(true)
     setSaveMsg('')
     try {
-      const records = buildDailyRecords(chatData.messages, chatData.removedNames)
+      const records = chatData.records
       if (!records.length) { setSaveMsg('ਕੋਈ ਰੋਜ਼ਾਨਾ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲੇ'); setSaving(false); return }
 
       const { data: { session } } = await supabase.auth.getSession()
@@ -210,22 +266,14 @@ export default function ChatReportPage() {
   if (loading) return <LoadingScreen />
 
   const sortedReport = report
-    ? [...report].sort((a, b) => {
-        if (a.finalStatus !== b.finalStatus) return a.finalStatus === 'pass' ? -1 : 1
-        return a.name.localeCompare(b.name)
-      })
+    ? [...report].sort((a, b) => truncateName(a.name).localeCompare(truncateName(b.name)))
     : []
-
-  const shortfallUsers = sortedReport.filter(u =>
-    CATEGORIES.some(c => !u.catResults[c.key].passed)
-  )
-  const finalFails = sortedReport.filter(u => u.finalStatus === 'fail')
+  const finalFails = sortedReport.filter(u => !u.weekly.passed)
+  const finalPasses = sortedReport.filter(u => u.weekly.passed)
 
   const tabs = [
     { key: 'report', label: 'ਰਿਪੋਰਟ ਕਾਰਡ', count: sortedReport.length },
-    { key: 'shortfall', label: 'ਕਮੀਆਂ', count: shortfallUsers.length },
-    { key: 'finalfail', label: 'ਅੰਤਮ ਫ਼ੇਲ੍ਹ', count: finalFails.length },
-    { key: 'leaderboard', label: '🏅 ਲੀਡਰਬੋਰਡ', count: null },
+    { key: 'finalfail', label: 'ਫ਼ੇਲ੍ਹ', count: finalFails.length },
   ]
 
   return (
@@ -241,7 +289,9 @@ export default function ChatReportPage() {
             ← ਵਾਪਸ
           </button>
           <h1 className="text-2xl font-bold" style={{ color: '#0c2540' }}>💬 ਜਾਪ ਰਿਪੋਰਟ</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(12,36,64,0.45)' }}>WhatsApp ਚੈਟ ਤੋਂ ਹਫ਼ਤਾਵਾਰੀ ਟੀਚਾ ਰਿਪੋਰਟ</p>
+          <p className="text-sm mt-0.5" style={{ color: 'rgba(12,36,64,0.45)' }}>
+            WhatsApp ਚੈਟ ਤੋਂ ਹਫ਼ਤਾਵਾਰੀ ਰਿਪੋਰਟ (ਘੰਟੇ-ਆਧਾਰਿਤ ਨਵਾਂ ਫ਼ਾਰਮੈਟ)
+          </p>
         </div>
 
         {/* Upload area */}
@@ -283,20 +333,18 @@ export default function ChatReportPage() {
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
             </div>
 
-            {/* Targets legend */}
+            {/* Rules legend */}
             {!processing && (
               <div className="mt-4 glass-card-static rounded-2xl p-4 animate-fadeInUp" style={{ animationDelay: '0.1s' }}>
-                <p className="text-xs font-semibold mb-3" style={{ color: 'rgba(12,36,64,0.5)' }}>ਹਫ਼ਤਾਵਾਰੀ ਟੀਚੇ</p>
-                <div className="flex flex-wrap gap-2">
-                  {CATEGORIES.map(c => (
-                    <span key={c.key} className="badge-royal" style={{ fontSize: '11px' }}>
-                      {c.emoji} {c.label}: {c.weeklyTarget}
-                    </span>
-                  ))}
-                </div>
-                <p className="text-xs mt-3" style={{ color: 'rgba(12,36,64,0.38)' }}>
-                  ਪਾਸ ਹੋਣ ਲਈ: ਗੁਰਮੰਤਰ + ਸਹਿਜ ਪਾਠ (ਦੋਵੇਂ ਲਾਜ਼ਮੀ) + ਘੱਟੋ-ਘੱਟ ੨ ਹੋਰ ਖੇਤਰ ਜ਼ਰੂਰੀ ਹਨ
-                </p>
+                <p className="text-xs font-semibold mb-3" style={{ color: 'rgba(12,36,64,0.5)' }}>ਪਾਸ ਹੋਣ ਲਈ (ਹਫਤੇ ਦਾ ਜੋੜ)</p>
+                <ul className="text-xs space-y-1" style={{ color: 'rgba(12,36,64,0.65)' }}>
+                  <li>੧. ਗੁਰਮੰਤ੍ਰ ੭ ਘੰਟੇ ਟਿਕਾ ਵਾਲਾ, ੨੮ ਘੰਟੇ ਤੁਰਦੇ ਫਿਰਦੇ (ਕੁਲ ੩੫ ਘੰਟੇ)</li>
+                  <li>੨. ਗੁਰਬਾਣੀ ੧੫ ਘੰਟੇ</li>
+                  <li>੩. ਵਿਚਾਰ ੨ ਘੰਟੇ</li>
+                  <li>੪. ਸਹਿਜ ਪਾਠ ੭ ਮਿੰਟ</li>
+                  <li>੫. ਹੱਥੀ ਸੇਵਾ ੨ ਦਿਨ</li>
+                  <li>੬. ਘੱਟੋ ਘੱਟ ੧ ਦਿਨ ਅੱਖਾਂ ਦਾ ਬਿਬੇਕ + ਅਵਗੁਣ + ਸ਼ਿਕਾਇਤ</li>
+                </ul>
               </div>
             )}
           </>
@@ -307,7 +355,7 @@ export default function ChatReportPage() {
           <div className="animate-fadeInUp">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm" style={{ color: 'rgba(12,36,64,0.5)' }}>
-                {sortedReport.length} ਭਾਗੀਦਾਰ · {sortedReport.filter(u => u.finalStatus === 'pass').length} ਪਾਸ · {finalFails.length} ਫ਼ੇਲ੍ਹ
+                {sortedReport.length} ਭਾਗੀਦਾਰ · {finalPasses.length} ਪਾਸ · {finalFails.length} ਫ਼ੇਲ੍ਹ
               </p>
               <button
                 onClick={() => { setReport(null); setWeekRange(null); setError('') }}
@@ -320,7 +368,7 @@ export default function ChatReportPage() {
               {weekRange ? `ਹਫ਼ਤਾ: ${fmtDate(weekRange.start)} – ${fmtDate(weekRange.end)}` : ''}
             </p>
 
-            {/* Save to database — persists daily records for the ਜੀਵਨ analytics */}
+            {/* Save to database */}
             <div className="glass-card-static rounded-2xl p-4 mb-5" style={{ background: 'rgba(14,65,110,0.03)' }}>
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div>
@@ -339,14 +387,10 @@ export default function ChatReportPage() {
                 <p className="text-xs mt-3" style={{ color: saveMsg.startsWith('✓') ? '#15803d' : '#dc2626' }}>{saveMsg}</p>
               )}
 
-              {/* Unmapped-name mapping panel */}
               {mapping && mapping.unmappedNames.length > 0 && (
                 <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(14,65,110,0.1)' }}>
                   <p className="text-xs font-semibold mb-1" style={{ color: '#0c2540' }}>
                     ਨਵੇਂ ਨਾਮ ਜੋੜੋ — {mapping.unmappedNames.length} ਨਾਮ ਕਿਸੇ ਵਰਤੋਂਕਾਰ ਨਾਲ ਨਹੀਂ ਜੁੜੇ
-                  </p>
-                  <p className="text-xs mb-3" style={{ color: 'rgba(12,36,64,0.45)' }}>
-                    ਇੱਕ ਵਾਰ ਜੋੜਨ ਤੋਂ ਬਾਅਦ ਅਗਲੀ ਵਾਰ ਆਪਣੇ-ਆਪ ਜੁੜ ਜਾਣਗੇ — ਸਿਰਫ਼ ਨਵੇਂ ਨਾਮ ਹੀ ਪੁੱਛੇ ਜਾਣਗੇ
                   </p>
                   <div className="space-y-2 max-h-72 overflow-y-auto">
                     {mapping.unmappedNames.map(name => (
@@ -392,12 +436,27 @@ export default function ChatReportPage() {
                   </span>
                 </button>
               ))}
+              <div className="ml-auto flex items-center">
+                <DownloadImageButton
+                  users={sortedReport.filter(u => !excluded.has(u.name))}
+                  weekRange={weekRange}
+                  excludedCount={excluded.size}
+                />
+              </div>
             </div>
 
-            {activeTab === 'report' && <ReportCardTab report={sortedReport} />}
-            {activeTab === 'shortfall' && <ShortfallTab users={shortfallUsers} />}
+            {activeTab === 'report' && (
+              <ReportCardTab
+                users={sortedReport}
+                excluded={excluded}
+                onToggleExclude={name => setExcluded(prev => {
+                  const next = new Set(prev)
+                  if (next.has(name)) next.delete(name); else next.add(name)
+                  return next
+                })}
+              />
+            )}
             {activeTab === 'finalfail' && <FinalFailTab users={finalFails} />}
-            {activeTab === 'leaderboard' && <LeaderboardTab users={sortedReport} weekRange={weekRange} />}
           </div>
         )}
       </div>
@@ -405,157 +464,64 @@ export default function ChatReportPage() {
   )
 }
 
-// ── Category themes ───────────────────────────────────────────────────────────
+// ── Tab: Report card (tabular) ────────────────────────────────────────────────
 
-const CAT_THEME = {
-  gurmantar:   { bg: '#b45309', light: '#fef9ec', border: '#d97706' },
-  brahmkavach: { bg: '#1d4ed8', light: '#eff6ff', border: '#3b82f6' },
-  birharhe:    { bg: '#be185d', light: '#fdf2f8', border: '#ec4899' },
-  japji:       { bg: '#7c3aed', light: '#f5f3ff', border: '#8b5cf6' },
-  sewa:        { bg: '#15803d', light: '#f0fdf4', border: '#22c55e' },
-  sehajpath:   { bg: '#0e7490', light: '#ecfeff', border: '#06b6d4' },
+// Format a number of hours as "H:MM" (admin preference: "੨:੩੦" not "2.5").
+// "5:30" means 5 hours 30 minutes. Returns "—" for null/invalid.
+function fmtHoursHM(v) {
+  if (v == null || !Number.isFinite(v)) return '—'
+  const total = Math.round(v * 60)                   // round to the nearest minute
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return `${h}:${String(m).padStart(2, '0')}`
 }
 
-// ── Tab 1: Report Card ────────────────────────────────────────────────────────
+// Colour-code the "ਮਹਾਰਾਜ ਨੂੰ ਦਿੱਤੇ ਦਿਨ ਦਾ %" on an 8-step gradient. The
+// admin's weekly pass boundary is 33 % (35 h / week target), so EVERY
+// bucket under 33 % stays in a red tone — deeper red for lower numbers.
+// Above 33 % moves through yellow → lime → light-green → green → dark-green.
+//   < 10 %   — deep red
+//   10–20 %  — red
+//   20–33 %  — salmon / light red
+//   33–50 %  — amber
+//   50–70 %  — yellow
+//   70–85 %  — light green (lime)
+//   85–100 % — green
+//   ≥ 100 %  — dark green
+// Each returned colour includes `bg` (pill), `fg` (text), `border`, and
+// `rowTint` (very-light background used to colour the full row).
+// Used by both the HTML table (inline style) and the downloadable image.
+function pctColor(pct) {
+  if (pct < 10)  return { bg: '#fecaca', fg: '#7f1d1d', border: 'rgba(220,38,38,0.5)',  rowTint: 'rgba(220,38,38,0.09)'  }
+  if (pct < 20)  return { bg: '#fecdd3', fg: '#9f1239', border: 'rgba(244,63,94,0.4)',  rowTint: 'rgba(244,63,94,0.07)'  }
+  if (pct < 33)  return { bg: '#fee2e2', fg: '#b91c1c', border: 'rgba(239,68,68,0.35)', rowTint: 'rgba(239,68,68,0.05)'  }
+  if (pct < 50)  return { bg: '#fed7aa', fg: '#9a3412', border: 'rgba(249,115,22,0.35)',rowTint: 'rgba(249,115,22,0.06)' }
+  if (pct < 70)  return { bg: '#fef3c7', fg: '#854d0e', border: 'rgba(234,179,8,0.35)', rowTint: 'rgba(234,179,8,0.07)'  }
+  if (pct < 85)  return { bg: '#d9f99d', fg: '#3f6212', border: 'rgba(132,204,22,0.4)', rowTint: 'rgba(132,204,22,0.1)'  }
+  if (pct < 100) return { bg: '#bbf7d0', fg: '#15803d', border: 'rgba(34,197,94,0.4)',  rowTint: 'rgba(34,197,94,0.1)'   }
+  return            { bg: '#86efac', fg: '#166534', border: 'rgba(22,163,74,0.5)',  rowTint: 'rgba(22,163,74,0.14)'  }
+}
 
-function ReportCardTab({ report }) {
-  const [filter, setFilter] = useState('all')
-  const [sort, setSort] = useState({ col: null, dir: 'desc' })
+function ReportCardTab({ users, excluded = new Set(), onToggleExclude }) {
+  if (!users.length) return <EmptyState emoji="📭" text="ਕੋਈ ਡੇਟਾ ਨਹੀਂ" />
 
-  if (!report.length) return <EmptyState emoji="📭" text="ਕੋਈ ਡੇਟਾ ਨਹੀਂ" />
+  // All hour-based columns use H:MM. (Vichar's weekly target is also in hours
+  // per the admin's rules, even though many users still write it in minutes —
+  // sanitizeHours() in the parser has already converted minute-entries to hours
+  // before it reaches this point.)
+  const fmtH = v => fmtHoursHM(v)
 
-  function toggleSort(col) {
-    setSort(prev =>
-      prev.col === col
-        ? { col, dir: prev.dir === 'desc' ? 'asc' : 'desc' }
-        : { col, dir: 'desc' }
+  // Each table cell shows the per-day average with the full weekly total in
+  // small muted parens next to it — the admin uses the weekly total when
+  // reconciling against the chat (easier than re-doing ×7 mentally).
+  function HourCell({ avg, total }) {
+    return (
+      <>
+        {fmtHoursHM(avg)}
+        <span className="text-[10px] font-normal ml-1" style={{ opacity: 0.55 }}>({fmtHoursHM(total)})</span>
+      </>
     )
   }
-
-  const filtered = filter === 'all' ? report
-    : filter === 'pass' ? report.filter(u => u.finalStatus === 'pass')
-    : report.filter(u => u.finalStatus === 'fail')
-
-  const sorted = sort.col ? [...filtered].sort((a, b) => {
-    if (sort.col === 'name') {
-      const va = truncateName(a.name), vb = truncateName(b.name)
-      return sort.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
-    }
-    const va = a.catResults[sort.col]?.value ?? -1
-    const vb = b.catResults[sort.col]?.value ?? -1
-    return sort.dir === 'asc' ? va - vb : vb - va
-  }) : filtered
-
-  const SortArrow = ({ col }) => (
-    <span className="ml-0.5" style={{ opacity: sort.col === col ? 1 : 0.3, fontSize: '10px' }}>
-      {sort.col === col ? (sort.dir === 'desc' ? '↓' : '↑') : '↕'}
-    </span>
-  )
-
-  return (
-    <div>
-      {/* Filter bar */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <span className="text-xs font-semibold" style={{ color: 'rgba(12,36,64,0.5)' }}>ਫਿਲਟਰ:</span>
-        {[
-          { key: 'all', label: `ਸਾਰੇ (${report.length})` },
-          { key: 'pass', label: `✓ ਪਾਸ (${report.filter(u => u.finalStatus === 'pass').length})` },
-          { key: 'fail', label: `✗ ਫ਼ੇਲ੍ਹ (${report.filter(u => u.finalStatus === 'fail').length})` },
-        ].map(({ key, label }) => (
-          <button key={key} onClick={() => setFilter(key)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-            style={{
-              background: filter === key ? 'rgba(14,65,110,0.12)' : 'rgba(14,65,110,0.04)',
-              border: `1px solid ${filter === key ? 'rgba(14,65,110,0.25)' : 'rgba(14,65,110,0.1)'}`,
-              color: filter === key ? '#0c2540' : 'rgba(12,36,64,0.5)',
-            }}>
-            {label}
-          </button>
-        ))}
-        <span className="ml-auto text-xs" style={{ color: 'rgba(12,36,64,0.35)' }}>ਕਾਲਮ ਹੈਡਰ ਦਬਾਓ ਕ੍ਰਮਬੱਧ ਕਰਨ ਲਈ</span>
-      </div>
-
-      <div className="glass-card-static rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: '2px solid rgba(14,65,110,0.1)', background: 'rgba(14,65,110,0.04)' }}>
-                <th className="text-left px-4 py-3 font-semibold cursor-pointer select-none" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}
-                  onClick={() => toggleSort('name')}>
-                  ਨਾਮ <SortArrow col="name" />
-                </th>
-                {CATEGORIES.map(c => (
-                  <th key={c.key} className="text-center px-3 py-3 font-semibold cursor-pointer select-none" style={{ color: '#0c2540', minWidth: 80 }}
-                    onClick={() => toggleSort(c.key)}>
-                    <span style={{ whiteSpace: 'nowrap' }}>{c.emoji} {c.label} <SortArrow col={c.key} /></span>
-                    <div className="text-xs font-normal mt-0.5" style={{ color: 'rgba(12,36,64,0.4)' }}>ਟੀਚਾ: {c.weeklyTarget}</div>
-                  </th>
-                ))}
-                <th className="text-center px-4 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>ਨਤੀਜਾ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((user, i) => (
-                <tr key={user.name}
-                  style={{
-                    borderBottom: '1px solid rgba(14,65,110,0.06)',
-                    background: user.finalStatus === 'pass'
-                      ? (i % 2 === 0 ? 'rgba(34,197,94,0.02)' : 'rgba(34,197,94,0.04)')
-                      : (i % 2 === 0 ? 'transparent' : 'rgba(14,65,110,0.015)'),
-                  }}>
-                  <td className="px-4 py-3 font-medium" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
-                    {truncateName(user.name)}
-                    {!user.hasReport && (
-                      <span className="ml-1.5 text-xs" style={{ color: 'rgba(12,36,64,0.35)' }}>(ਕੋਈ ਸੁਨੇਹਾ ਨਹੀਂ)</span>
-                    )}
-                  </td>
-                  {CATEGORIES.map(c => {
-                    const res = user.catResults[c.key]
-                    return (
-                      <td key={c.key} className="px-3 py-3 text-center">
-                        {res.value !== null ? (
-                          <span className="inline-block px-2 py-0.5 rounded-lg text-xs font-semibold" style={{
-                            background: res.passed ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                            color: res.passed ? '#15803d' : '#dc2626',
-                            border: `1px solid ${res.passed ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.2)'}`,
-                          }}>
-                            {res.value}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'rgba(12,36,64,0.2)', fontSize: '18px' }}>—</span>
-                        )}
-                      </td>
-                    )
-                  })}
-                  <td className="px-4 py-3 text-center">
-                    {user.finalStatus === 'pass' ? (
-                      <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-bold"
-                        style={{ background: 'rgba(34,197,94,0.1)', color: '#15803d', border: '1px solid rgba(34,197,94,0.25)' }}>
-                        ✓ ਪਾਸ
-                      </span>
-                    ) : (
-                      <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-bold"
-                        style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.2)' }}>
-                        ✗ ਫ਼ੇਲ੍ਹ
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Tab 2: Shortfall ──────────────────────────────────────────────────────────
-
-function ShortfallTab({ users }) {
-  const failedUsers = users.filter(u => CATEGORIES.some(cat => !u.catResults[cat.key].passed))
-
-  if (!failedUsers.length) return <EmptyState emoji="🎉" text="ਸਾਰੇ ਟੀਚੇ ਪੂਰੇ ਹੋਏ!" />
 
   return (
     <div className="glass-card-static rounded-2xl overflow-hidden">
@@ -563,41 +529,107 @@ function ShortfallTab({ users }) {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '2px solid rgba(14,65,110,0.1)', background: 'rgba(14,65,110,0.04)' }}>
-              <th className="text-left px-4 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>ਨਾਮ</th>
-              {CATEGORIES.map(cat => (
-                <th key={cat.key} className="text-center px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
-                  {cat.emoji} {cat.label}
-                  <div style={{ color: 'rgba(12,36,64,0.4)', fontSize: '10px', fontWeight: 400 }}>ਟੀਚਾ: {cat.weeklyTarget}</div>
-                </th>
-              ))}
+              <th className="text-center px-2 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap', width: 36 }} title="ਚਿੱਤਰ ਵਿੱਚ ਸ਼ਾਮਲ ਕਰੋ">
+                ✓
+              </th>
+              <th className="text-left px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>ਨਾਮ</th>
+              <th className="text-right px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
+                ਗੁਰਮੰਤ੍ਰ ਟਿਕਾ<div className="text-[10px] font-normal" style={{ opacity: 0.5 }}>/ਦਿਨ (ਹਫ਼ਤਾ) · ਟੀਚਾ ੭h</div>
+              </th>
+              <th className="text-right px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
+                ਤੁਰਦੇ ਫਿਰਦੇ<div className="text-[10px] font-normal" style={{ opacity: 0.5 }}>/ਦਿਨ (ਹਫ਼ਤਾ) · ਟੀਚਾ ੨੮h</div>
+              </th>
+              <th className="text-right px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
+                ਗੁਰਬਾਣੀ<div className="text-[10px] font-normal" style={{ opacity: 0.5 }}>/ਦਿਨ (ਹਫ਼ਤਾ) · ਟੀਚਾ ੧੫h</div>
+              </th>
+              <th className="text-right px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
+                ਵਿਚਾਰ<div className="text-[10px] font-normal" style={{ opacity: 0.5 }}>/ਦਿਨ (ਹਫ਼ਤਾ) · ਟੀਚਾ ੨h</div>
+              </th>
+              <th className="text-right px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
+                🛌 ਨੀਂਦ<div className="text-[10px] font-normal" style={{ opacity: 0.5 }}>ਘੰਟੇ/ਦਿਨ</div>
+              </th>
+              <th className="text-right px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
+                ਮਹਾਰਾਜ ਨੂੰ<div className="text-[10px] font-normal" style={{ opacity: 0.5 }}>ਘੰਟੇ/ਦਿਨ · %</div>
+              </th>
+              <th className="text-center px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>ਨਤੀਜਾ</th>
             </tr>
           </thead>
           <tbody>
-            {failedUsers.map((user, i) => (
-              <tr key={user.name}
-                style={{ borderBottom: '1px solid rgba(14,65,110,0.06)', background: i % 2 === 0 ? 'transparent' : 'rgba(14,65,110,0.015)' }}>
-                <td className="px-4 py-3 font-medium" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>{truncateName(user.name)}</td>
-                {CATEGORIES.map(cat => {
-                  const res = user.catResults[cat.key]
-                  if (res.passed) {
+            {users.map((u, i) => {
+              const isExcluded = excluded.has(u.name)
+              return (
+              <tr key={u.name}
+                style={{
+                  borderBottom: '1px solid rgba(14,65,110,0.06)',
+                  // Tint every row with its score-colour. Keeps a subtle
+                  // alternating darken on odd rows so the table still reads
+                  // zebra-like. Excluded rows are desaturated so the admin
+                  // can see at a glance who won't appear in the image.
+                  background: i % 2 === 0
+                    ? pctColor(u.pctOfDay).rowTint
+                    : `color-mix(in srgb, ${pctColor(u.pctOfDay).rowTint} 65%, rgba(14,65,110,0.025))`,
+                  opacity: isExcluded ? 0.4 : 1,
+                }}>
+                <td className="px-2 py-3 text-center">
+                  <input type="checkbox"
+                    checked={!isExcluded}
+                    onChange={() => onToggleExclude?.(u.name)}
+                    className="w-4 h-4 cursor-pointer"
+                    style={{ accentColor: '#0c2540' }}
+                    title={isExcluded ? 'ਚਿੱਤਰ ਵਿੱਚ ਸ਼ਾਮਲ ਕਰੋ' : 'ਚਿੱਤਰ ਵਿੱਚੋਂ ਹਟਾਓ'}
+                  />
+                </td>
+                <td className="px-3 py-3 font-medium" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
+                  {truncateName(u.name)}
+                  {!u.hasReport ? (
+                    <span className="ml-1.5 text-xs" style={{ color: 'rgba(12,36,64,0.35)' }}>(ਕੋਈ ਸੁਨੇਹਾ ਨਹੀਂ)</span>
+                  ) : (
+                    <span className="ml-1.5 text-xs" style={{ color: 'rgba(12,36,64,0.35)' }}>({u.daysReported}/7 ਦਿਨ)</span>
+                  )}
+                </td>
+                <td className="px-3 py-3 text-right" style={{ color: '#0c2540' }}>
+                  <HourCell avg={u.avg.gurmantar_tikaa} total={u.weekly.totals.gurmantar_tikaa} />
+                </td>
+                <td className="px-3 py-3 text-right" style={{ color: '#0c2540' }}>
+                  <HourCell avg={u.avg.gurmantar_turde} total={u.weekly.totals.gurmantar_turde} />
+                </td>
+                <td className="px-3 py-3 text-right" style={{ color: '#0c2540' }}>
+                  <HourCell avg={u.avg.gurbani} total={u.weekly.totals.gurbani} />
+                </td>
+                <td className="px-3 py-3 text-right" style={{ color: '#0c2540' }}>
+                  <HourCell avg={u.avg.vichar} total={u.weekly.totals.vichar} />
+                </td>
+                <td className="px-3 py-3 text-right" style={{ color: '#0c2540' }}>
+                  {fmtH(u.avg.neend)}
+                </td>
+                <td className="px-3 py-3 text-right font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
+                  {fmtHoursHM(u.avgHoursPerDay)}
+                  {(() => {
+                    const c = pctColor(u.pctOfDay)
                     return (
-                      <td key={cat.key} className="px-3 py-3 text-center" style={{ color: '#16a34a', fontSize: '16px' }}>✓</td>
+                      <span className="text-xs font-bold ml-1.5 px-1.5 py-0.5 rounded-md"
+                        style={{ background: c.bg, color: c.fg, border: `1px solid ${c.border}` }}>
+                        {u.pctOfDay.toFixed(1)}%
+                      </span>
                     )
-                  }
-                  const shortfall = res.value !== null ? res.target - res.value : null
-                  return (
-                    <td key={cat.key} className="px-3 py-3 text-center">
-                      <div className="font-semibold" style={{ color: '#dc2626' }}>
-                        {res.value !== null ? res.value : '—'}
-                      </div>
-                      {shortfall !== null && (
-                        <div style={{ color: '#dc2626', fontSize: '11px', opacity: 0.75 }}>−{shortfall}</div>
-                      )}
-                    </td>
-                  )
-                })}
+                  })()}
+                </td>
+                <td className="px-3 py-3 text-center">
+                  {u.weekly.passed ? (
+                    <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-bold"
+                      style={{ background: 'rgba(34,197,94,0.1)', color: '#15803d', border: '1px solid rgba(34,197,94,0.25)' }}>
+                      ✓ ਪਾਸ
+                    </span>
+                  ) : (
+                    <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-bold"
+                      style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.2)' }}>
+                      ✗ ਫ਼ੇਲ੍ਹ
+                    </span>
+                  )}
+                </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -605,47 +637,41 @@ function ShortfallTab({ users }) {
   )
 }
 
-// ── Tab 3: Final Fail ─────────────────────────────────────────────────────────
+// ── Tab: Final Fail ───────────────────────────────────────────────────────────
 
 function FinalFailTab({ users }) {
-  if (!users.length) return <EmptyState emoji="🏆" text="ਕੋਈ ਅੰਤਮ ਫ਼ੇਲ੍ਹ ਨਹੀਂ!" />
-
+  if (!users.length) return <EmptyState emoji="🏆" text="ਕੋਈ ਫ਼ੇਲ੍ਹ ਨਹੀਂ!" />
   return (
     <div className="glass-card-static rounded-2xl overflow-hidden">
       <div className="p-4 border-b" style={{ borderColor: 'rgba(239,68,68,0.15)', background: 'rgba(239,68,68,0.03)' }}>
-        <p className="text-sm font-semibold" style={{ color: '#dc2626' }}>
-          {users.length} ਵਰਤੋਂਕਾਰ ਅੰਤਮ ਫ਼ੇਲ੍ਹ
-        </p>
-        <p className="text-xs mt-0.5" style={{ color: 'rgba(12,36,64,0.4)' }}>
-          ਪਾਸ ਹੋਣ ਲਈ: ਗੁਰਮੰਤਰ + ਸਹਿਜ ਪਾਠ (ਦੋਵੇਂ ਲਾਜ਼ਮੀ) + ੨ ਹੋਰ ਖੇਤਰ ਜ਼ਰੂਰੀ ਹਨ
-        </p>
+        <p className="text-sm font-semibold" style={{ color: '#dc2626' }}>{users.length} ਵਰਤੋਂਕਾਰ ਫ਼ੇਲ੍ਹ</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(14,65,110,0.08)', background: 'rgba(14,65,110,0.02)' }}>
-              <th className="text-left px-4 py-3 font-semibold" style={{ color: '#0c2540' }}>ਨਾਮ</th>
-              <th className="text-left px-3 py-3 font-semibold" style={{ color: '#0c2540' }}>ਫ਼ੇਲ੍ਹ ਦਾ ਕਾਰਨ</th>
-              <th className="text-center px-3 py-3 font-semibold" style={{ color: '#0c2540' }}>ਪਾਸ ਖੇਤਰ</th>
+              <th className="text-left px-3 py-3 font-semibold" style={{ color: '#0c2540' }}>ਨਾਮ</th>
+              <th className="text-left px-3 py-3 font-semibold" style={{ color: '#0c2540' }}>ਘੱਟ ਖੇਤਰ</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((user, i) => {
-              const passedCats = CATEGORIES.filter(c => user.catResults[c.key].passed)
+            {users.map((u, i) => {
+              const fails = u.weekly.checks.filter(c => !c.passed)
+              const disc = u.weekly.disciplinePass ? [] : ['੧ ਦਿਨ ਦਾ ਨਿਯਮ']
+              const reasons = [
+                ...fails.map(f => {
+                  const label = CATEGORIES.find(c => c.key === f.key)?.label || f.key
+                  return `${label} (${(Math.round(f.value * 10) / 10)}/${f.target})`
+                }),
+                ...disc,
+              ].join(', ')
               return (
-                <tr key={user.name}
+                <tr key={u.name}
                   style={{ borderBottom: '1px solid rgba(14,65,110,0.06)', background: i % 2 === 0 ? 'transparent' : 'rgba(239,68,68,0.015)' }}>
-                  <td className="px-4 py-3 font-medium" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
-                    <span className="mr-1.5">❌</span>{truncateName(user.name)}
+                  <td className="px-3 py-3 font-medium" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
+                    <span className="mr-1.5">❌</span>{truncateName(u.name)}
                   </td>
-                  <td className="px-3 py-3" style={{ color: '#dc2626' }}>{user.failReason}</td>
-                  <td className="px-3 py-3 text-center">
-                    {passedCats.length ? (
-                      <span className="text-sm">{passedCats.map(c => c.emoji).join(' ')}</span>
-                    ) : (
-                      <span style={{ color: 'rgba(12,36,64,0.25)' }}>—</span>
-                    )}
-                  </td>
+                  <td className="px-3 py-3" style={{ color: '#dc2626' }}>{reasons || '—'}</td>
                 </tr>
               )
             })}
@@ -656,102 +682,46 @@ function FinalFailTab({ users }) {
   )
 }
 
-// ── Tab 4: Leaderboard ────────────────────────────────────────────────────────
+// ── Download button ───────────────────────────────────────────────────────────
 
-function LeaderboardTab({ users, weekRange }) {
+function DownloadImageButton({ users, weekRange, excludedCount = 0 }) {
   const [downloading, setDownloading] = useState(false)
-
-  const rankings = CATEGORIES.map(cat => ({
-    cat,
-    ranked: [...users]
-      .filter(u => u.catResults[cat.key].value !== null)
-      .sort((a, b) => (b.catResults[cat.key].value ?? 0) - (a.catResults[cat.key].value ?? 0)),
-  }))
-
-  async function handleDownload() {
+  async function handle() {
+    if (!users.length) return
     setDownloading(true)
-    try { await downloadLeaderboardImage(rankings, weekRange) }
+    try { await downloadReportCardImage(users, weekRange) }
     finally { setDownloading(false) }
   }
-
+  const disabled = downloading || !users.length
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <p className="text-sm" style={{ color: 'rgba(12,36,64,0.5)' }}>ਹਰ ਖੇਤਰ ਵਿੱਚ ਰੈਂਕਿੰਗ</p>
-        <button onClick={handleDownload} disabled={downloading}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
-          style={{ background: 'rgba(14,65,110,0.08)', border: '1px solid rgba(14,65,110,0.18)', color: '#1a5f8f', opacity: downloading ? 0.6 : 1 }}>
-          {downloading ? '⏳ ਤਿਆਰ ਹੋ ਰਿਹਾ ਹੈ...' : '📥 ਚਿੱਤਰ ਡਾਊਨਲੋਡ'}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {rankings.map(({ cat, ranked }) => {
-          const theme = CAT_THEME[cat.key]
-          return (
-            <div key={cat.key} className="rounded-2xl overflow-hidden"
-              style={{ border: `1.5px solid ${theme.border}55`, boxShadow: `0 2px 12px ${theme.bg}18` }}>
-              {/* Header */}
-              <div className="px-4 py-3 text-white" style={{ background: theme.bg }}>
-                <div className="font-bold text-base">{cat.emoji} {cat.label}</div>
-                <div className="text-xs mt-0.5" style={{ opacity: 0.85 }}>ਹਫ਼ਤਾਵਾਰੀ ਟੀਚਾ: {cat.weeklyTarget}</div>
-              </div>
-              {/* Column headers */}
-              <div className="grid text-xs font-semibold px-3 py-2"
-                style={{ gridTemplateColumns: '36px 1fr 68px 46px', background: theme.light, color: '#374151', borderBottom: `1px solid ${theme.border}33` }}>
-                <span className="text-center">ਰੈਂਕ</span>
-                <span>ਨਾਮ</span>
-                <span className="text-right">ਗਿਣਤੀ</span>
-                <span className="text-right">%</span>
-              </div>
-              {/* Rows */}
-              {ranked.map((user, i) => {
-                const val = user.catResults[cat.key].value
-                const pct = Math.round((val / cat.weeklyTarget) * 100)
-                const rank = ranked.slice(0, i).filter(u => u.catResults[cat.key].value > val).length + 1
-                const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' }
-                const rowBg = rank === 1 ? '#fffbeb' : rank === 2 ? '#f8fafc' : rank === 3 ? '#fff8f1'
-                  : i % 2 === 0 ? 'white' : theme.light + '88'
-                return (
-                  <div key={user.name} className="grid items-center px-3 py-1.5"
-                    style={{ gridTemplateColumns: '36px 1fr 68px 46px', borderBottom: '1px solid rgba(14,65,110,0.05)', background: rowBg }}>
-                    <span className="text-center" style={{ fontSize: rank <= 3 ? '16px' : '11px', fontWeight: rank > 3 ? 700 : 'normal', color: rank > 3 ? 'rgba(12,36,64,0.4)' : undefined }}>
-                      {MEDALS[rank] || rank}
-                    </span>
-                    <span className="font-medium truncate" style={{ color: '#1f2937', fontSize: '12px' }}>{truncateName(user.name)}</span>
-                    <span className="text-right font-semibold text-xs" style={{ color: '#1f2937' }}>{val.toLocaleString()}</span>
-                    <span className="text-right text-xs font-semibold" style={{ color: pct >= 100 ? '#15803d' : '#dc2626' }}>{pct}%</span>
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    <button onClick={handle} disabled={disabled}
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+      style={{ background: 'rgba(14,65,110,0.08)', border: '1px solid rgba(14,65,110,0.18)', color: '#1a5f8f', opacity: disabled ? 0.6 : 1 }}>
+      {downloading
+        ? '⏳ ਤਿਆਰ...'
+        : excludedCount > 0
+          ? `📥 ਚਿੱਤਰ ਡਾਊਨਲੋਡ (${users.length})`
+          : '📥 ਚਿੱਤਰ ਡਾਊਨਲੋਡ'}
+    </button>
   )
 }
 
-async function downloadLeaderboardImage(rankings, weekRange) {
+// ── Report-card image (tabular, sorted by name, averages + %) ─────────────────
+
+async function downloadReportCardImage(users, weekRange) {
   await document.fonts.ready
   await document.fonts.load('bold 20px "Noto Sans Gurmukhi"').catch(() => {})
 
-  const W = 1440
-  const SIDE_W = 120           // side flower strip width
-  const PAD = SIDE_W + 14      // content starts just inside side strips
-  const BOT_H = 140            // bottom flower strip height
-  const GAP = 16
-  const HDR_H = 160
-  const ROW_H = 44
-  const PANEL_HDR = 72
-  const COL_HDR = 36
-  const BOTTOM_PAD = BOT_H + 18
-
-  const rows1 = Math.max(...rankings.slice(0, 3).map(r => r.ranked.length))
-  const rows2 = Math.max(...rankings.slice(3).map(r => r.ranked.length))
-  const ph1 = PANEL_HDR + COL_HDR + rows1 * ROW_H + 6
-  const ph2 = PANEL_HDR + COL_HDR + rows2 * ROW_H + 6
-  const CANVAS_H = HDR_H + ph1 + GAP + ph2 + BOTTOM_PAD
+  // Layout
+  const W = 1400
+  const SIDE_W = 100
+  const BOT_H = 110
+  const HDR_H = 170
+  const COL_HDR_H = 80
+  const ROW_H = 50
+  const BOTTOM_PAD = BOT_H + 24
+  const n = users.length
+  const CANVAS_H = HDR_H + COL_HDR_H + n * ROW_H + BOTTOM_PAD + 20
 
   const canvas = document.createElement('canvas')
   canvas.width = W; canvas.height = CANVAS_H
@@ -763,7 +733,7 @@ async function downloadLeaderboardImage(rankings, weekRange) {
 
   const gf = (sz, bold) => `${bold ? 'bold ' : ''}${sz}px "Noto Sans Gurmukhi","Gurmukhi MN",sans-serif`
 
-  // ── image loader ──────────────────────────────────────────
+  // Decorative borders (optional images; degrade gracefully)
   function loadImg(src) {
     return new Promise(res => {
       const img = new Image()
@@ -775,53 +745,58 @@ async function downloadLeaderboardImage(rankings, weekRange) {
     loadImg('/borders/flower-garland.png'),
   ])
 
-  // ── flower borders — multiply blend removes white bg ──────
   ctx.save()
   ctx.globalCompositeOperation = 'multiply'
 
-  // Bottom: meadow tiled end-to-end at natural aspect ratio
   if (imgMeadow) {
     const mTileW = BOT_H * (imgMeadow.naturalWidth / imgMeadow.naturalHeight)
     const botY = CANVAS_H - BOT_H
     ctx.save()
     ctx.beginPath(); ctx.rect(0, botY, W, BOT_H); ctx.clip()
-    for (let x = 0; x < W; x += mTileW)
-      ctx.drawImage(imgMeadow, x, botY, mTileW, BOT_H)
+    for (let x = 0; x < W; x += mTileW) ctx.drawImage(imgMeadow, x, botY, mTileW, BOT_H)
     ctx.restore()
   }
-
-  // Sides: garland rotated 90°, tiled end-to-end vertically
   if (imgGarland) {
     const gTileH = SIDE_W * (imgGarland.naturalWidth / imgGarland.naturalHeight)
-
-    // Left strip — garland rotated 90° CW
     ctx.save()
     ctx.beginPath(); ctx.rect(0, 0, SIDE_W, CANVAS_H); ctx.clip()
     for (let y = 0; y < CANVAS_H; y += gTileH) {
-      ctx.save()
-      ctx.translate(SIDE_W, y)
-      ctx.rotate(Math.PI / 2)
-      ctx.drawImage(imgGarland, 0, 0, gTileH, SIDE_W)
-      ctx.restore()
+      ctx.save(); ctx.translate(SIDE_W, y); ctx.rotate(Math.PI / 2)
+      ctx.drawImage(imgGarland, 0, 0, gTileH, SIDE_W); ctx.restore()
     }
     ctx.restore()
-
-    // Right strip — same but mirrored horizontally
     ctx.save()
     ctx.beginPath(); ctx.rect(W - SIDE_W, 0, SIDE_W, CANVAS_H); ctx.clip()
     for (let y = 0; y < CANVAS_H; y += gTileH) {
-      ctx.save()
-      ctx.translate(W, y); ctx.scale(-1, 1)
+      ctx.save(); ctx.translate(W, y); ctx.scale(-1, 1)
       ctx.translate(SIDE_W, 0); ctx.rotate(Math.PI / 2)
-      ctx.drawImage(imgGarland, 0, 0, gTileH, SIDE_W)
-      ctx.restore()
+      ctx.drawImage(imgGarland, 0, 0, gTileH, SIDE_W); ctx.restore()
     }
     ctx.restore()
   }
-
   ctx.restore()
 
-  // ── canvas flower helpers ─────────────────────────────────
+  // Gold frame
+  ctx.strokeStyle = '#d4a84c'; ctx.lineWidth = 2.5
+  ctx.strokeRect(8, 8, W - 16, CANVAS_H - 16)
+  ctx.strokeStyle = 'rgba(212,168,76,0.4)'; ctx.lineWidth = 1
+  ctx.strokeRect(17, 17, W - 34, CANVAS_H - 34)
+
+  // Title
+  ctx.textAlign = 'center'
+  ctx.fillStyle = '#1a1a5e'
+  ctx.font = gf(44, true)
+  ctx.fillText('ਸਪਤਾਹਿਕ ਰਿਪੋਰਟ ਕਾਰਡ', W / 2, 72)
+  ctx.font = gf(19)
+  ctx.fillStyle = '#7c5a28'
+  ctx.fillText('ਰੋਜ਼ਾਨਾ ਔਸਤ (ਘੰਟੇ) · ਮਹਾਰਾਜ ਨੂੰ ਦਿੱਤੇ ਦਿਨ ਦਾ %', W / 2, 108)
+  if (weekRange) {
+    ctx.font = gf(15)
+    ctx.fillStyle = '#a08050'
+    ctx.fillText(`ਹਫ਼ਤਾ: ${fmtDate(weekRange.start)} – ${fmtDate(weekRange.end)}`, W / 2, 138)
+  }
+
+  // Divider flowers
   function drawPetal(cx, cy, angle, len, wid) {
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle)
     ctx.beginPath(); ctx.moveTo(0, 0)
@@ -831,160 +806,141 @@ async function downloadLeaderboardImage(rankings, weekRange) {
   }
   function drawFlower(cx, cy, nPetals, len, wid, color, alpha) {
     ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = color
-    for (let p = 0; p < nPetals; p++)
-      drawPetal(cx, cy, (p / nPetals) * Math.PI * 2, len, wid)
+    for (let p = 0; p < nPetals; p++) drawPetal(cx, cy, (p / nPetals) * Math.PI * 2, len, wid)
     ctx.beginPath(); ctx.arc(cx, cy, Math.max(2, len * 0.14), 0, Math.PI * 2); ctx.fill()
     ctx.restore()
   }
-
-  // ── gold border frame ─────────────────────────────────────
-  ctx.strokeStyle = '#d4a84c'; ctx.lineWidth = 2.5
-  ctx.strokeRect(8, 8, W - 16, CANVAS_H - 16)
-  ctx.strokeStyle = 'rgba(212,168,76,0.4)'; ctx.lineWidth = 1
-  ctx.strokeRect(17, 17, W - 34, CANVAS_H - 34)
-
-  // ── title text ────────────────────────────────────────────
-  ctx.textAlign = 'center'
-  ctx.fillStyle = '#1a1a5e'
-  ctx.font = gf(50, true)
-  ctx.fillText('ਸਪਤਾਹਿਕ ਲੀਡਰਬੋਰਡ', W / 2, 68)
-  ctx.font = gf(21)
-  ctx.fillStyle = '#7c5a28'
-  ctx.fillText('ਗੁਰਮਤਿ ਦੀ ਰਾਹ ਤੇ – ਸੰਗਤ ਨਾਲ, ਸਦਾ ਅੱਗੇ', W / 2, 102)
-  if (weekRange) {
-    ctx.font = gf(15)
-    ctx.fillStyle = '#a08050'
-    ctx.fillText(`ਹਫ਼ਤਾ: ${fmtDate(weekRange.start)} – ${fmtDate(weekRange.end)}`, W / 2, 128)
-  }
-
-  // ── decorative divider below title area ───────────────────
-  const divY = HDR_H - 8
-  ctx.strokeStyle = 'rgba(201,168,76,0.38)'; ctx.lineWidth = 1
+  const divY = HDR_H - 12
+  ctx.strokeStyle = 'rgba(201,168,76,0.4)'; ctx.lineWidth = 1
   ctx.setLineDash([3, 8])
-  ctx.beginPath(); ctx.moveTo(PAD + 40, divY); ctx.lineTo(W/2 - 55, divY); ctx.stroke()
-  ctx.beginPath(); ctx.moveTo(W/2 + 55, divY); ctx.lineTo(W - PAD - 40, divY); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(SIDE_W + 40, divY); ctx.lineTo(W / 2 - 50, divY); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(W / 2 + 50, divY); ctx.lineTo(W - SIDE_W - 40, divY); ctx.stroke()
   ctx.setLineDash([])
-  drawFlower(W/2,      divY, 8, 16, 5,   '#b8860b', 0.9)
-  drawFlower(W/2 - 55, divY, 6,  8, 2.8, '#c9a84c', 0.72)
-  drawFlower(W/2 + 55, divY, 6,  8, 2.8, '#c9a84c', 0.72)
+  drawFlower(W / 2, divY, 8, 14, 4.5, '#b8860b', 0.9)
 
-  const THEME = {
-    gurmantar:   { bg: '#c8711e', light: '#fff5e8', bdr: 'rgba(200,113,30,0.3)' },
-    brahmkavach: { bg: '#4068d4', light: '#eff6ff', bdr: 'rgba(64,104,212,0.3)' },
-    birharhe:    { bg: '#cc3d7a', light: '#fdf2f8', bdr: 'rgba(204,61,122,0.3)' },
-    japji:       { bg: '#9255e5', light: '#f5f3ff', bdr: 'rgba(146,85,229,0.3)' },
-    sewa:        { bg: '#28a055', light: '#f0fdf4', bdr: 'rgba(40,160,85,0.3)' },
-    sehajpath:   { bg: '#0e8aa0', light: '#ecfeff', bdr: 'rgba(14,138,160,0.3)' },
-  }
+  // Table layout — 8 columns (no pass-badge on the image, admin's request).
+  // Splitting "ਮਹਾਰਾਜ ਨੂੰ" into HOURS and %. The % cell uses a gradient tint
+  // so the admin can scan the leaderboard at a glance.
+  const tableX = SIDE_W + 24
+  const tableW = W - 2 * (SIDE_W + 24)
+  const cols = [
+    { label: 'ਨਾਮ', sub: '', align: 'left', w: 0.26 },
+    { label: 'ਗੁਰਮੰਤ੍ਰ ਟਿਕਾ', sub: 'ਘੰਟੇ/ਦਿਨ', align: 'right', w: 0.11 },
+    { label: 'ਤੁਰਦੇ ਫਿਰਦੇ', sub: 'ਘੰਟੇ/ਦਿਨ', align: 'right', w: 0.11 },
+    { label: 'ਗੁਰਬਾਣੀ', sub: 'ਘੰਟੇ/ਦਿਨ', align: 'right', w: 0.11 },
+    { label: 'ਵਿਚਾਰ', sub: 'ਘੰਟੇ/ਦਿਨ', align: 'right', w: 0.10 },
+    { label: 'ਨੀਂਦ', sub: 'ਘੰਟੇ/ਦਿਨ', align: 'right', w: 0.10 },
+    { label: 'ਮਹਾਰਾਜ ਨੂੰ', sub: 'ਘੰਟੇ/ਦਿਨ', align: 'right', w: 0.10 },
+    { label: '%', sub: 'ਦਿਨ ਦਾ', align: 'right', w: 0.11 },
+  ]
+  // Resolve widths
+  const colWidths = cols.map(c => c.w * tableW)
+  const colXs = []
+  let runX = tableX
+  for (const w of colWidths) { colXs.push(runX); runX += w }
 
-  function rr(x, y, w, h, r) {
-    ctx.beginPath()
-    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y)
-    ctx.arcTo(x + w, y, x + w, y + r, r); ctx.lineTo(x + w, y + h - r)
-    ctx.arcTo(x + w, y + h, x + w - r, y + h, r); ctx.lineTo(x + r, y + h)
-    ctx.arcTo(x, y + h, x, y + h - r, r); ctx.lineTo(x, y + r)
-    ctx.arcTo(x, y, x + r, y, r); ctx.closePath()
-  }
+  // Column header row
+  const chY = HDR_H
+  ctx.fillStyle = '#1e3a5f'
+  ctx.fillRect(tableX, chY, tableW, COL_HDR_H)
+  ctx.fillStyle = 'white'
+  cols.forEach((c, i) => {
+    const x = colXs[i], w = colWidths[i]
+    ctx.font = gf(16, true)
+    ctx.textAlign = c.align === 'center' ? 'center' : c.align
+    const tx = c.align === 'left' ? x + 12 : c.align === 'right' ? x + w - 12 : x + w / 2
+    ctx.fillText(c.label, tx, chY + 32)
+    if (c.sub) {
+      ctx.font = gf(12)
+      ctx.fillStyle = 'rgba(255,255,255,0.75)'
+      ctx.fillText(c.sub, tx, chY + 54)
+      ctx.fillStyle = 'white'
+    }
+  })
 
-  rankings.forEach(({ cat, ranked }, ci) => {
-    const row = Math.floor(ci / 3)
-    const col = ci % 3
-    const ph = row === 0 ? ph1 : ph2
-    const pw = (W - PAD * 2 - GAP * 2) / 3
-    const px = PAD + col * (pw + GAP)
-    const py = HDR_H + row * (ph1 + GAP)
-    const th = THEME[cat.key]
+  // Data rows — use the shared H:MM formatter (admin prefers "੫:੩੦" over "5.5h").
+  const fmtH = v => fmtHoursHM(v)
 
-    // Panel bg + border
-    ctx.fillStyle = '#ffffff'; rr(px, py, pw, ph, 12); ctx.fill()
-    ctx.strokeStyle = th.bdr; ctx.lineWidth = 1.5; rr(px, py, pw, ph, 12); ctx.stroke()
+  users.forEach((u, idx) => {
+    const ry = chY + COL_HDR_H + idx * ROW_H
+    // Row background tinted by the score colour. Odd rows are tinted slightly
+    // more so the table keeps its zebra feel.
+    const pc = pctColor(u.pctOfDay)
+    ctx.fillStyle = pc.rowTint
+    ctx.fillRect(tableX, ry, tableW, ROW_H)
+    if (idx % 2 === 1) {
+      ctx.fillStyle = 'rgba(14,65,110,0.025)'
+      ctx.fillRect(tableX, ry, tableW, ROW_H)
+    }
 
-    // Colored header (clipped)
-    ctx.save(); rr(px, py, pw, ph, 12); ctx.clip()
-    ctx.fillStyle = th.bg; ctx.fillRect(px, py, pw, PANEL_HDR)
+    // Bottom border
+    ctx.strokeStyle = 'rgba(14,65,110,0.08)'; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(tableX, ry + ROW_H); ctx.lineTo(tableX + tableW, ry + ROW_H); ctx.stroke()
+
+    const ty = ry + ROW_H * 0.65
+
+    // Name (clipped)
+    ctx.save()
+    ctx.beginPath(); ctx.rect(colXs[0], ry, colWidths[0], ROW_H); ctx.clip()
+    ctx.fillStyle = '#111827'
+    ctx.font = gf(17, true)
+    ctx.textAlign = 'left'
+    ctx.fillText(truncateName(u.name), colXs[0] + 12, ty)
     ctx.restore()
 
-    // Header text — emoji + label separately for font fallback
-    ctx.textAlign = 'center'
-    ctx.fillStyle = '#ffffff'
-    ctx.font = `bold 20px "Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",serif`
-    ctx.fillText(cat.emoji, px + pw / 2 - 56, py + 33)
-    ctx.font = gf(20, true)
-    ctx.fillText(cat.label, px + pw / 2 + 14, py + 33)
-    ctx.font = gf(13)
-    ctx.fillStyle = 'rgba(255,255,255,0.88)'
-    ctx.fillText(`ਹਫ਼ਤਾਵਾਰੀ ਟੀਚਾ: ${cat.weeklyTarget}`, px + pw / 2, py + 57)
+    // Numeric columns (order matches `cols` after name)
+    const vals = [
+      fmtH(u.avg.gurmantar_tikaa),
+      fmtH(u.avg.gurmantar_turde),
+      fmtH(u.avg.gurbani),
+      fmtH(u.avg.vichar),
+      fmtH(u.avg.neend),
+      fmtHoursHM(u.avgHoursPerDay),
+    ]
+    for (let i = 0; i < vals.length; i++) {
+      ctx.fillStyle = '#111827'
+      ctx.font = gf(17)
+      ctx.textAlign = 'right'
+      const col = colXs[i + 1], w = colWidths[i + 1]
+      ctx.fillText(vals[i], col + w - 12, ty)
+    }
 
-    // Column header row
-    const chy = py + PANEL_HDR
-    ctx.fillStyle = th.light; ctx.fillRect(px, chy, pw, COL_HDR)
-    ctx.strokeStyle = th.bdr; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(px, chy + COL_HDR); ctx.lineTo(px + pw, chy + COL_HDR); ctx.stroke()
-    ctx.fillStyle = '#374151'; ctx.font = gf(13, true)
-    ctx.textAlign = 'center'; ctx.fillText('ਰੈਂਕ', px + 26, chy + 24)
-    ctx.textAlign = 'left'; ctx.fillText('ਨਾਮ', px + 56, chy + 24)
+    // Percentage cell — tinted pill + colour-coded text.
+    const pcol = pc
+    const pxCell = colXs[7], pwCell = colWidths[7]
+    // Tinted pill behind the %.
+    const pillW = 90, pillH = 28
+    const plx = pxCell + pwCell - pillW - 10, ply = ry + ROW_H / 2 - pillH / 2
+    ctx.fillStyle = pcol.bg
+    roundRect(ctx, plx, ply, pillW, pillH, 8); ctx.fill()
+    ctx.fillStyle = pcol.fg
+    ctx.font = gf(16, true)
     ctx.textAlign = 'right'
-    ctx.fillText('ਹਫ਼ਤਾਵਾਰੀ ਗਿਣਤੀ', px + pw - 58, chy + 24)
-    ctx.fillText('ਪ੍ਰਤੀਸ਼ਤ', px + pw - 6, chy + 24)
-
-    // User rows
-    const ty0 = chy + COL_HDR
-    ranked.forEach((user, i) => {
-      const val = user.catResults[cat.key].value
-      const rank = ranked.slice(0, i).filter(u => u.catResults[cat.key].value > val).length + 1
-      // Medal (and name anonymization) only for top-3 who actually passed the target
-      const medaled = rank <= 3 && user.catResults[cat.key].passed
-      const MEDALS_MAP = { 1: '🥇', 2: '🥈', 3: '🥉' }
-      const medalBg = { 1: '#fffbeb', 2: '#f8fafc', 3: '#fff8f1' }
-      const ry = ty0 + i * ROW_H
-      ctx.fillStyle = medaled ? (medalBg[rank] || '#ffffff') : (i % 2 === 0 ? '#ffffff' : th.light)
-      ctx.globalAlpha = medaled ? 1 : (i % 2 === 0 ? 1 : 0.55)
-      ctx.fillRect(px, ry, pw, ROW_H)
-      ctx.globalAlpha = 1
-
-      ctx.strokeStyle = 'rgba(14,65,110,0.07)'; ctx.lineWidth = 1
-      ctx.beginPath(); ctx.moveTo(px, ry + ROW_H); ctx.lineTo(px + pw, ry + ROW_H); ctx.stroke()
-
-      const ty = ry + ROW_H * 0.67
-
-      // Rank / medal
-      if (medaled) {
-        ctx.font = `24px "Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",serif`
-        ctx.textAlign = 'center'
-        ctx.fillText(MEDALS_MAP[rank], px + 26, ty + 4)
-      } else {
-        ctx.fillStyle = '#6b7280'; ctx.font = gf(15, true)
-        ctx.textAlign = 'center'; ctx.fillText(String(rank), px + 26, ty)
-      }
-
-      // Name (clipped to available width) — medaled top-3 names anonymized to "ਕਿਰਪਾ"
-      const nmW = pw - 150
-      const displayName = medaled ? 'ਕਿਰਪਾ' : truncateName(user.name)
-      ctx.save()
-      ctx.beginPath(); ctx.rect(px + 48, ry + 1, nmW, ROW_H - 2); ctx.clip()
-      ctx.fillStyle = '#111827'; ctx.font = gf(19)
-      ctx.textAlign = 'left'; ctx.fillText(displayName, px + 50, ty)
-      ctx.restore()
-
-      // Value
-      ctx.fillStyle = '#1f2937'; ctx.font = gf(17, true)
-      ctx.textAlign = 'right'; ctx.fillText(val.toLocaleString(), px + pw - 58, ty)
-
-      // Percentage
-      const pct = Math.round((val / cat.weeklyTarget) * 100)
-      ctx.fillStyle = pct >= 100 ? '#15803d' : '#dc2626'
-      ctx.font = gf(17); ctx.fillText(`${pct}%`, px + pw - 6, ty)
-    })
+    ctx.fillText(`${u.pctOfDay.toFixed(1)}%`, pxCell + pwCell - 20, ty)
   })
+
+  // (The "ਔਸਤ (ਸਭ)" overall averages row was intentionally removed from the
+  // downloadable image per admin request — it adds noise to the shared PNG.
+  // The on-page table still shows the per-user weekly totals which is enough
+  // for admin validation.)
 
   canvas.toBlob(blob => {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `leaderboard-${weekRange ? fmtDate(weekRange.start).replace(/ /g, '-') : 'report'}.png`
+    a.download = `report-card-${weekRange ? fmtDate(weekRange.start).replace(/ /g, '-') : 'week'}.png`
     document.body.appendChild(a); a.click()
     document.body.removeChild(a); URL.revokeObjectURL(url)
   }, 'image/png')
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y)
+  ctx.arcTo(x + w, y, x + w, y + r, r); ctx.lineTo(x + w, y + h - r)
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r); ctx.lineTo(x + r, y + h)
+  ctx.arcTo(x, y + h, x, y + h - r, r); ctx.lineTo(x, y + r)
+  ctx.arcTo(x, y, x + r, y, r); ctx.closePath()
 }
 
 // ── Shared ────────────────────────────────────────────────────────────────────

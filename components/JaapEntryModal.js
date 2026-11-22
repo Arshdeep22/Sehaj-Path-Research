@@ -3,8 +3,12 @@
 import { useState, useEffect } from 'react'
 import { CATEGORY_DAILY, BOOL_FIELDS } from '../lib/jaapParser'
 
-// Ordered the same as the Jivan cards.
-const FORM_ORDER = ['gurmantar', 'sewa', 'brahmkavach', 'birharhe', 'japji', 'sehajpath']
+// Form order mirrors the Jivan analytics cards. Includes the new hour-based
+// gurmantar split (tikaa / turde) and the "ਨੀਂਦ" sleep field.
+const FORM_ORDER = [
+  'gurmantar_tikaa', 'gurmantar_turde', 'gurbani', 'vichar',
+  'japji', 'brahmkavach', 'birharhe', 'sewa', 'sehajpath', 'neend',
+]
 const CATS = FORM_ORDER.map(k => CATEGORY_DAILY.find(c => c.key === k)).filter(Boolean)
 
 function minToTime(m) {
@@ -29,7 +33,6 @@ export default function JaapEntryModal({ token, byDate, defaultDate, onClose, on
 
   const existing = !!byDate[date]
 
-  // Lock background scroll while the modal is open.
   useEffect(() => {
     const html = document.documentElement, body = document.body
     const prevHtml = html.style.overflow, prevBody = body.style.overflow
@@ -78,9 +81,20 @@ export default function JaapEntryModal({ token, byDate, defaultDate, onClose, on
     }
   }
 
+  // Which categories render as yes/no toggles instead of a number input.
+  const YES_NO_KEYS = new Set(['sewa', 'japji'])
+
+  // Helper to show the right unit label ("ਘੰਟੇ" / "ਮਿੰਟ" / blank).
+  function unitFor(c) {
+    if (c.unit === 'hours') return 'ਘੰਟੇ'
+    if (c.unit === 'minutes') return 'ਮਿੰਟ'
+    if (c.unit === 'days') return 'ਦਿਨ'
+    return ''
+  }
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, overscrollBehavior: 'contain' }}>
+      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 460, overscrollBehavior: 'contain' }}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-lg" style={{ color: '#0c2540' }}>ਹਾਜ਼ਰੀ ਜੋੜੋ</h2>
           <button onClick={onClose} aria-label="close" className="text-xl leading-none" style={{ color: 'rgba(12,36,64,0.5)' }}>✕</button>
@@ -94,16 +108,19 @@ export default function JaapEntryModal({ token, byDate, defaultDate, onClose, on
           {existing && <span className="text-xs" style={{ color: '#0e7490' }}>ਇਸ ਦਿਨ ਦਾ ਰਿਕਾਰਡ ਮੌਜੂਦ ਹੈ — ਸੋਧਿਆ ਜਾਵੇਗਾ</span>}
         </label>
 
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 max-h-[55vh] overflow-y-auto pr-1">
           {CATS.map(c => (
             <div key={c.key} className="flex items-center gap-3">
-              <span className="text-sm flex-1" style={{ color: '#0c2540' }}>{c.emoji} {c.label}</span>
-              {c.key === 'sewa' ? (
+              <span className="text-sm flex-1" style={{ color: '#0c2540' }}>
+                {c.emoji} {c.label}
+                {c.unit !== 'count' && <span className="text-xs ml-1" style={{ color: 'rgba(12,36,64,0.4)' }}>({unitFor(c)})</span>}
+              </span>
+              {YES_NO_KEYS.has(c.key) ? (
                 <div className="flex gap-1">
                   {[['1', 'ਹਾਂ'], ['0', 'ਨਹੀਂ']].map(([val, lbl]) => {
-                    const on = (Number(vals.sewa) > 0 ? '1' : vals.sewa === '0' ? '0' : '') === val
+                    const on = (Number(vals[c.key]) > 0 ? '1' : vals[c.key] === '0' ? '0' : '') === val
                     return (
-                      <button key={val} onClick={() => setVals(s => ({ ...s, sewa: val }))}
+                      <button key={val} onClick={() => setVals(s => ({ ...s, [c.key]: val }))}
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold"
                         style={{
                           background: on ? '#15803d' : 'rgba(12,36,64,0.05)',
@@ -114,7 +131,7 @@ export default function JaapEntryModal({ token, byDate, defaultDate, onClose, on
                   })}
                 </div>
               ) : (
-                <input type="number" inputMode="decimal" min="0" step={c.key === 'japji' ? '0.5' : '1'}
+                <input type="number" inputMode="decimal" min="0" step="0.1"
                   value={vals[c.key] ?? ''} placeholder="0"
                   onChange={e => setVals(s => ({ ...s, [c.key]: e.target.value }))}
                   className="w-28 px-3 py-1.5 rounded-lg text-sm text-right"
