@@ -509,7 +509,6 @@ function ReportCardTab({ users, excluded = new Set(), onToggleExclude }) {
   // per the admin's rules, even though many users still write it in minutes —
   // sanitizeHours() in the parser has already converted minute-entries to hours
   // before it reaches this point.)
-  const fmtH = v => fmtHoursHM(v)
 
   // Each table cell shows the per-day average with the full weekly total in
   // small muted parens next to it — the admin uses the weekly total when
@@ -546,7 +545,7 @@ function ReportCardTab({ users, excluded = new Set(), onToggleExclude }) {
                 ਵਿਚਾਰ<div className="text-[10px] font-normal" style={{ opacity: 0.5 }}>/ਦਿਨ (ਹਫ਼ਤਾ) · ਟੀਚਾ ੨h</div>
               </th>
               <th className="text-right px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
-                🛌 ਨੀਂਦ<div className="text-[10px] font-normal" style={{ opacity: 0.5 }}>ਘੰਟੇ/ਦਿਨ</div>
+                🛌 ਨੀਂਦ<div className="text-[10px] font-normal" style={{ opacity: 0.5 }}>/ਦਿਨ (ਹਫ਼ਤਾ)</div>
               </th>
               <th className="text-right px-3 py-3 font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
                 ਮਹਾਰਾਜ ਨੂੰ<div className="text-[10px] font-normal" style={{ opacity: 0.5 }}>ਘੰਟੇ/ਦਿਨ · %</div>
@@ -600,7 +599,7 @@ function ReportCardTab({ users, excluded = new Set(), onToggleExclude }) {
                   <HourCell avg={u.avg.vichar} total={u.weekly.totals.vichar} />
                 </td>
                 <td className="px-3 py-3 text-right" style={{ color: '#0c2540' }}>
-                  {fmtH(u.avg.neend)}
+                  <HourCell avg={u.avg.neend} total={u.weekly.totals.neend_sum ?? 0} />
                 </td>
                 <td className="px-3 py-3 text-right font-semibold" style={{ color: '#0c2540', whiteSpace: 'nowrap' }}>
                   {fmtHoursHM(u.avgHoursPerDay)}

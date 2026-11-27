@@ -3,7 +3,7 @@
 import { useEffect, useRef, startTransition } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 
-const TABS = ['/topics', '/prashan', '/jhalak', '/jivan', '/leaderboard']
+const TABS = ['/topics', '/prashan', '/jhalak', '/leaderboard']
 const THRESHOLD = 0.38
 
 export default function SwipeNav() {
